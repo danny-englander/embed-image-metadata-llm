@@ -47,6 +47,16 @@ class TestParseArgs(unittest.TestCase):
             parse_error("--title", "--creative-description"),
         )
 
+    def test_context_option_is_not_discarded(self):
+        self.assertEqual(parse("--alt", "--context", "Koi pond").context, "Koi pond")
+        self.assertEqual(parse("--alt", "-c", "Koi pond").context, "Koi pond")
+
+    def test_context_positional_still_works(self):
+        self.assertEqual(parse("--alt", "Koi pond").context, "Koi pond")
+
+    def test_context_is_none_when_not_given(self):
+        self.assertIsNone(parse("--alt").context)
+
     def test_removed_flags_are_rejected(self):
         for flag in ("--iptc", "--title-only", "--force"):
             parse_error("--alt", flag)

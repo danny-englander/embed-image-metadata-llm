@@ -143,8 +143,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Folder containing images (e.g. path/to/image/folder)",
     )
+    # Separate dest: a positional with the same dest as --context would overwrite the option's value
+    # with its own default (None) whenever it is omitted.
     parser.add_argument(
-        "context",
+        "context_positional",
+        metavar="context",
         nargs="?",
         default=None,
         help="Brief description of the images (optional; can also use -c/--context)",
@@ -198,6 +201,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     """Parse and validate CLI args. Adds args.fields and args.overwrite (tuples, in FIELDS order)."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    args.context = args.context or args.context_positional
     args.fields = tuple(f for f in FIELDS if getattr(args, f))
     args.overwrite = tuple(f for f in FIELDS if getattr(args, f"overwrite_{f}"))
     if not args.fields:
