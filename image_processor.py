@@ -331,25 +331,28 @@ def resize_image_for_llm(image_path: Path, max_dimension: int = 1024) -> Path:
 
 
 def parse_iptc_json(raw: str) -> Optional[dict]:
-    """Parse JSON object from model output, stripping markdown fences if present."""
+    """Parse the JSON object from model output, stripping markdown fences if present.
+
+    If the model emitted several objects (e.g. a draft followed by a corrected "final" one),
+    the last one wins. Surrounding prose is ignored.
+    """
     text = raw.strip()
     fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if fence:
         text = fence.group(1).strip()
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        # Try to find first {...} block
-        match = re.search(r"\{[\s\S]*\}", text)
-        if not match:
-            return None
+    decoder = json.JSONDecoder()
+    found = None
+    start = text.find("{")
+    while start != -1:
         try:
-            data = json.loads(match.group(0))
+            obj, end = decoder.raw_decode(text, start)
         except json.JSONDecodeError:
-            return None
-    if not isinstance(data, dict):
-        return None
-    return data
+            start = text.find("{", start + 1)
+            continue
+        if isinstance(obj, dict):
+            found = obj
+        start = text.find("{", end)
+    return found
 
 
 def generate_iptc_fields(

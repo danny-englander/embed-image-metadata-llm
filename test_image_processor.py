@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from image_processor import (
     llm_option_args,
+    parse_iptc_json,
     DESCRIPTION_STORY_MAX_LEN,
     TITLE_MAX_LEN,
     build_metadata_prompt,
@@ -217,6 +218,36 @@ class TestProcessSingleImage(unittest.TestCase):
     def test_skipped_field_records_its_existing_value(self):
         result, *_ = self.run_fields(["title"], existing={"Title": "Existing title"})
         self.assertEqual(result["existing"], {"title": "Existing title"})
+
+
+class TestParseIptcJson(unittest.TestCase):
+    def test_plain_object(self):
+        self.assertEqual(parse_iptc_json('{"title": "A"}'), {"title": "A"})
+
+    def test_markdown_fenced_object(self):
+        self.assertEqual(parse_iptc_json('```json\n{"title": "A"}\n```'), {"title": "A"})
+
+    def test_prose_around_the_object_is_ignored(self):
+        self.assertEqual(parse_iptc_json('Here you go: {"title": "A"} Hope that helps!'), {"title": "A"})
+
+    def test_last_object_wins_when_the_model_corrects_itself(self):
+        raw = (
+            '{"title": "A", "description": "D", "keywords": null}\n\n'
+            'Correction: the response must contain only the two requested keys. Final JSON:\n\n'
+            '{"title": "A", "description": "D"}'
+        )
+        self.assertEqual(parse_iptc_json(raw), {"title": "A", "description": "D"})
+
+    def test_nested_objects_are_kept_whole(self):
+        self.assertEqual(parse_iptc_json('{"a": {"b": 1}}'), {"a": {"b": 1}})
+
+    def test_braces_inside_strings_do_not_confuse_it(self):
+        self.assertEqual(parse_iptc_json('{"title": "Curly {braces} here"}'), {"title": "Curly {braces} here"})
+
+    def test_invalid_or_missing_json_returns_none(self):
+        self.assertIsNone(parse_iptc_json("no json here"))
+        self.assertIsNone(parse_iptc_json('{"title": '))
+        self.assertIsNone(parse_iptc_json("[1, 2, 3]"))
 
 
 class TestLlmOptionArgs(unittest.TestCase):
