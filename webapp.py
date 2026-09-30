@@ -19,8 +19,10 @@ from caption import load_models
 from image_processor import (
     DEFAULT_MODEL,
     DELAY_BETWEEN_REQUESTS,
+    DESCRIPTION_STYLES,
     EXTENSIONS,
     FIELDS,
+    TITLE_STYLES,
     process_single_image,
 )
 
@@ -40,8 +42,8 @@ def _run_job(
     context: str,
     fields: tuple,
     overwrite: tuple,
-    creative_title: bool,
-    creative_description: bool,
+    title_style: str,
+    description_style: str,
 ) -> None:
     with _jobs_lock:
         job = _jobs[job_id]
@@ -57,8 +59,8 @@ def _run_job(
                 context,
                 fields,
                 overwrite,
-                creative_title,
-                creative_description,
+                title_style,
+                description_style,
             )
         except Exception as e:  # e.g. a corrupt image; don't let it stall the whole job
             result = {
@@ -74,7 +76,13 @@ def _run_job(
                 "existing": {},
             }
         with _jobs_lock:
-            job["results"].append({"filename": image_path.name, **result})
+            job["results"].append(
+                {
+                    "filename": image_path.name,
+                    **result,
+                    "styles": {"title": title_style, "description": description_style},
+                }
+            )
             job["done"] += 1
 
     with _jobs_lock:
@@ -108,9 +116,17 @@ def create_job():
     fields = tuple(f for f in FIELDS if request.form.get(f) == "on")
     if not fields:
         return jsonify({"error": "Select at least one field to generate."}), 400
-    overwrite = tuple(f for f in fields if request.form.get(f"overwrite_{f}") == "on")
-    creative_title = request.form.get("creative_title") == "on" and "title" in fields
-    creative_description = request.form.get("creative_description") == "on" and "description" in fields
+    if request.form.get("overwrite_all") == "on":
+        overwrite = fields
+    else:
+        overwrite = tuple(f for f in fields if request.form.get(f"overwrite_{f}") == "on")
+    # A style only applies to a selected field; otherwise it is ignored.
+    title_style = request.form.get("title_style", "standard") if "title" in fields else "standard"
+    description_style = (
+        request.form.get("description_style", "standard") if "description" in fields else "standard"
+    )
+    if title_style not in TITLE_STYLES or description_style not in DESCRIPTION_STYLES:
+        return jsonify({"error": "Unknown title or description style."}), 400
 
     job_id = uuid.uuid4().hex
     job_dir = JOBS_ROOT / job_id
@@ -140,7 +156,7 @@ def create_job():
 
     thread = threading.Thread(
         target=_run_job,
-        args=(job_id, model, context, fields, overwrite, creative_title, creative_description),
+        args=(job_id, model, context, fields, overwrite, title_style, description_style),
         daemon=True,
     )
     thread.start()

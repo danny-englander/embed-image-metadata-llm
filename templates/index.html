@@ -72,9 +72,11 @@
       gap: 0.4rem;
       margin: 0;
     }
+    label.inline-check { font-weight: 600; display: flex; align-items: center; gap: 0.4rem; margin: 0; }
     .field-row label.field-name { font-weight: 600; min-width: 10rem; }
     .field-row label.dependent { color: var(--muted); }
-    .field-row label.dependent:has(input:disabled) { opacity: 0.5; }
+    .field-row label.dependent:has(:disabled) { opacity: 0.5; }
+    .field-row select { width: auto; padding: 0.2rem 0.4rem; font-size: 0.85rem; }
     .field-hint { margin: 0.25rem 0 0 1.4rem; }
     .hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
     button {
@@ -99,8 +101,19 @@
     .result-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; }
     summary.result-head { cursor: pointer; list-style: none; }
     summary.result-head::-webkit-details-marker { display: none; }
-    summary.result-head::after { content: "▸"; color: var(--muted); transition: transform 0.15s; }
-    details[open] > summary.result-head::after { transform: rotate(90deg); }
+    summary.result-head::after {
+      content: "";
+      flex: none;
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--accent);
+      border-radius: 50%;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f8cff' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / 18px 18px no-repeat;
+      transition: transform 0.2s, background-color 0.15s;
+    }
+    summary.result-head:hover::after, summary.result-head:focus-visible::after { background-color: rgba(79, 140, 255, 0.18); }
+    details[open] > summary.result-head::after { transform: rotate(180deg); background-color: rgba(79, 140, 255, 0.18); }
+    summary.result-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
     summary.result-head:hover { background: rgba(255, 255, 255, 0.03); }
     .thumb {
       width: 56px; height: 56px; flex: none; border-radius: 6px; overflow: hidden;
@@ -119,6 +132,7 @@
     .result-body td.value.kept { color: var(--muted); }
     .result-body .chars { color: var(--muted); font-size: 0.8rem; }
     .result-note { color: var(--muted); margin: 0.5rem 0 0; }
+    .field-note { display: block; color: var(--muted); font-size: 0.8rem; }
     @media (max-width: 600px) {
       /* Stack each field into a card: field + outcome on one line, value beneath. */
       .result-body table, .result-body tbody { display: block; }
@@ -187,17 +201,17 @@
           <div class="field-row">
             <label class="field-name"><input type="checkbox" name="title" data-field="title"> IPTC Title</label>
             <label class="dependent"><input type="checkbox" name="overwrite_title" data-overwrite-for="title" disabled> Overwrite existing</label>
-            <label class="dependent"><input type="checkbox" name="creative_title" id="creative_title" data-style-for="title" disabled> Creative title</label>
+            <label class="dependent style-select">Style <select name="title_style" id="title_style" data-style-for="title" disabled><option value="standard">Standard</option><option value="creative">Creative</option><option value="editorial">Editorial</option><option value="poetic">Poetic</option><option value="literal">Literal</option></select></label>
           </div>
-          <p class="hint field-hint">Creative titles are more evocative and artistic (e.g. “Wanderer Beneath a Burning Sky”) instead of a literal marketplace title like “Astronaut in Red Spacesuit Under Radiant Desert Sky”.</p>
+          <p class="hint field-hint" id="title_style_hint"></p>
         </div>
         <div>
           <div class="field-row">
             <label class="field-name"><input type="checkbox" name="description" data-field="description"> IPTC Description</label>
             <label class="dependent"><input type="checkbox" name="overwrite_description" data-overwrite-for="description" disabled> Overwrite existing</label>
-            <label class="dependent"><input type="checkbox" name="creative_description" id="creative_description" data-style-for="description" disabled> Creative description</label>
+            <label class="dependent style-select">Style <select name="description_style" id="description_style" data-style-for="description" disabled><option value="standard">Standard</option><option value="creative">Creative</option><option value="caption">Caption</option><option value="photographic">Photographic</option></select></label>
           </div>
-          <p class="hint field-hint">Creative descriptions are a short-story vignette instead of 3–4 descriptive sentences, capped at 375 characters.</p>
+          <p class="hint field-hint" id="description_style_hint"></p>
         </div>
         <div>
           <div class="field-row">
@@ -206,6 +220,11 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="field">
+      <label class="inline-check"><input type="checkbox" name="overwrite_all" id="overwrite_all"> Overwrite all existing values</label>
+      <p class="hint">Replace whatever is already there for every selected field. The per-field Overwrite boxes above are locked while this is checked.</p>
     </div>
 
     <button type="submit" id="submit-btn">Upload &amp; Process</button>
@@ -255,20 +274,57 @@ let thumbUrls = [];
 
 const fieldBoxes = Array.from(form.querySelectorAll("input[data-field]"));
 
+const overwriteAll = document.getElementById("overwrite_all");
+const overwriteBoxes = Array.from(form.querySelectorAll("input[data-overwrite-for]"));
+// What the user set on each per-field Overwrite box, so unticking "Overwrite all" can restore it.
+const ownOverwrite = new Map(overwriteBoxes.map((box) => [box, false]));
+
 function syncFieldOptions() {
-  fieldBoxes.forEach((box) => {
-    // Overwrite and style boxes are only meaningful (and submitted) while their field is selected.
-    form
-      .querySelectorAll(
-        `input[data-overwrite-for="${box.dataset.field}"], input[data-style-for="${box.dataset.field}"]`
-      )
-      .forEach((dependent) => {
-        dependent.disabled = !box.checked;
-        if (!box.checked) dependent.checked = false;
-      });
+  const fieldOn = (name) => form.querySelector(`input[data-field="${name}"]`).checked;
+  overwriteBoxes.forEach((box) => {
+    const on = fieldOn(box.dataset.overwriteFor);
+    // "Overwrite all" locks the per-field boxes (shown checked) for the fields that are selected.
+    box.disabled = overwriteAll.checked || !on;
+    box.checked = on && (overwriteAll.checked || ownOverwrite.get(box));
+  });
+  // Style menus are only meaningful (and submitted) while their field is selected.
+  form.querySelectorAll("select[data-style-for]").forEach((menu) => {
+    menu.disabled = !fieldOn(menu.dataset.styleFor);
   });
 }
 
+const STYLE_HINTS = {
+  title: {
+    standard: "A concise marketplace-style title, e.g. “Astronaut in Red Spacesuit Under Radiant Desert Sky”.",
+    creative: "More evocative and artistic, e.g. “Wanderer Beneath a Burning Sky”, instead of a literal title.",
+    editorial: "Photo-caption style, “Subject, Place”: factual and journalistic, e.g. “Koi Pond, Japanese Friendship Garden”.",
+    poetic: "Lyrical, with rhythm and imagery like a line of verse, e.g. “Amber Light Folding into Still Water”.",
+    literal: "Just the main subject in a few plain words, e.g. “Three Koi in a Pond”.",
+  },
+  description: {
+    standard: "3–4 descriptive sentences that build on the alt text.",
+    creative: "A short-story vignette instead of descriptive sentences, capped at 375 characters.",
+    caption: "One factual, journalistic caption sentence, up to 200 characters.",
+    photographic: "2–4 sentences on light, color, composition and mood, in a photographer’s artist-statement voice.",
+  },
+};
+
+function syncStyleHints() {
+  Object.keys(STYLE_HINTS).forEach((field) => {
+    const menu = document.getElementById(`${field}_style`);
+    document.getElementById(`${field}_style_hint`).textContent = STYLE_HINTS[field][menu.value];
+  });
+}
+
+form.querySelectorAll("select[data-style-for]").forEach((menu) => menu.addEventListener("change", syncStyleHints));
+syncStyleHints();
+
+overwriteBoxes.forEach((box) =>
+  box.addEventListener("change", () => {
+    ownOverwrite.set(box, box.checked);
+  })
+);
+overwriteAll.addEventListener("change", syncFieldOptions);
 fieldBoxes.forEach((box) => box.addEventListener("change", syncFieldOptions));
 syncFieldOptions();
 
@@ -399,12 +455,15 @@ function createRow(entry, file, statusText = "queued") {
 function fieldRows(r) {
   const out = [];
   for (const [key, label] of FIELD_ROWS) {
+    // A non-standard style only applies to a field that was actually generated, not one that was skipped.
+    const style = r.styles && r.styles[key];
+    const note = style && style !== "standard" && !r.skipped.includes(key) ? `(${style})` : "";
     if (r.written.includes(key)) {
-      out.push({ label, cls: "written", outcome: "Written", value: r[key] });
+      out.push({ label, note, cls: "written", outcome: "Written", value: r[key] });
     } else if (r.skipped.includes(key)) {
-      out.push({ label, cls: "skipped", outcome: "Skipped, already set", value: r.existing[key], kept: true });
+      out.push({ label, note, cls: "skipped", outcome: "Skipped, already set", value: r.existing[key], kept: true });
     } else if (key in r.failed) {
-      out.push({ label, cls: "error", outcome: `Failed: ${r.failed[key]}`, value: "" });
+      out.push({ label, note, cls: "error", outcome: `Failed: ${r.failed[key]}`, value: "" });
     }
   }
   return out;
@@ -419,7 +478,9 @@ function buildTable(rowsData) {
   const body = el("tbody");
   rowsData.forEach((d) => {
     const tr = el("tr");
-    tr.appendChild(el("td", null, d.label));
+    const labelCell = el("td", null, d.label);
+    if (d.note) labelCell.appendChild(el("span", "field-note", d.note));
+    tr.appendChild(labelCell);
     tr.appendChild(el("td", `status-${d.cls}`, d.outcome));
     const value = el("td", d.kept ? "value kept" : "value", d.value || "");
     if (d.value && !d.kept) value.appendChild(el("span", "chars", `  (${d.value.length} chars)`));
