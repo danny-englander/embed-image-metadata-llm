@@ -17,8 +17,10 @@ from image_processor import (
     DEFAULT_MODEL,
     DELAY_BETWEEN_REQUESTS,
     EXTENSIONS,
+    DESCRIPTION_STYLES,
     FIELD_LABELS,
     FIELDS,
+    TITLE_STYLES,
     process_single_image,
 )
 from term import (
@@ -52,8 +54,8 @@ def process_directory(
     context: Optional[str] = None,
     fields: tuple = (),
     overwrite: tuple = (),
-    creative_title: bool = False,
-    creative_description: bool = False,
+    title_style: str = "standard",
+    description_style: str = "standard",
 ) -> None:
     """Process all images in directory: generate and write the selected metadata fields."""
     if not directory.is_dir():
@@ -79,16 +81,10 @@ def process_directory(
         FIELD_LABELS[f] + (" (overwrite)" if f in overwrite else "") for f in FIELDS if f in fields
     )
     print(f"{paint('Fields:', DIM)} {paint(selected, YELLOW)}")
-    if "title" in fields and creative_title:
-        print(
-            f"{paint('Title style:', DIM)} "
-            f"{paint('creative (evocative) instead of descriptive marketplace-style', MAGENTA)}"
-        )
-    if "description" in fields and creative_description:
-        print(
-            f"{paint('Description style:', DIM)} "
-            f"{paint('creative short story (max 375 characters)', BLUE)}"
-        )
+    if "title" in fields and title_style != "standard":
+        print(f"{paint('Title style:', DIM)} {paint(title_style, MAGENTA)}")
+    if "description" in fields and description_style != "standard":
+        print(f"{paint('Description style:', DIM)} {paint(description_style, BLUE)}")
     print()
 
     for idx, image_path in enumerate(image_paths, 1):
@@ -105,8 +101,8 @@ def process_directory(
             context,
             fields,
             overwrite,
-            creative_title,
-            creative_description,
+            title_style,
+            description_style,
         )
 
         if result["alt"]:
@@ -190,16 +186,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     style = parser.add_argument_group("style")
     style.add_argument(
+        "--title-style",
+        choices=TITLE_STYLES,
+        help="Title writing style (requires --title; default: standard)",
+    )
+    style.add_argument(
+        "--description-style",
+        choices=DESCRIPTION_STYLES,
+        help="Description writing style (requires --description; default: standard)",
+    )
+    style.add_argument(
         "--creative-title",
         action="store_true",
-        help="Use evocative, artistic titles instead of descriptive marketplace-style titles (requires --title)",
+        help="Shortcut for --title-style creative",
     )
     style.add_argument(
         "--creative-description",
         action="store_true",
-        help="Write the Description as a creative short story of at most 375 characters (requires --description)",
+        help="Shortcut for --description-style creative (a short story of at most 375 characters)",
     )
     return parser
+
+
+def _resolve_style(parser, field, style, creative, fields) -> str:
+    """Combine --<field>-style with the --creative-<field> shortcut into one style name."""
+    if creative and style not in (None, "creative"):
+        parser.error(f"--creative-{field} conflicts with --{field}-style {style}")
+    if (creative or style) and field not in fields:
+        flag = f"--creative-{field}" if creative else f"--{field}-style"
+        parser.error(f"{flag} requires --{field}")
+    return "creative" if creative else (style or "standard")
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -217,10 +233,12 @@ def parse_args(argv=None) -> argparse.Namespace:
         if getattr(args, f"overwrite_{field}") and field not in args.fields:
             parser.error(f"--overwrite-{field} requires --{field}")
     args.overwrite = tuple(f for f in args.overwrite if f in args.fields)
-    if args.creative_title and "title" not in args.fields:
-        parser.error("--creative-title requires --title")
-    if args.creative_description and "description" not in args.fields:
-        parser.error("--creative-description requires --description")
+    args.title_style = _resolve_style(
+        parser, "title", args.title_style, args.creative_title, args.fields
+    )
+    args.description_style = _resolve_style(
+        parser, "description", args.description_style, args.creative_description, args.fields
+    )
     return args
 
 
@@ -232,8 +250,8 @@ def main() -> None:
         args.context,
         args.fields,
         args.overwrite,
-        args.creative_title,
-        args.creative_description,
+        args.title_style,
+        args.description_style,
     )
 
 

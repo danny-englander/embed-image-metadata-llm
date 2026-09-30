@@ -5,10 +5,14 @@ from unittest.mock import patch
 from image_processor import (
     llm_option_args,
     parse_iptc_json,
+    DESCRIPTION_CAPTION_MAX_LEN,
     DESCRIPTION_STORY_MAX_LEN,
+    DESCRIPTION_STYLES,
     TITLE_MAX_LEN,
+    TITLE_STYLES,
     build_metadata_prompt,
     description_instruction,
+    description_max_len,
     process_single_image,
     title_instruction,
     truncate_description,
@@ -23,7 +27,7 @@ class TestTitleInstruction(unittest.TestCase):
         self.assertNotIn("{title_len}", text)
 
     def test_creative_asks_for_mood_not_catalog(self):
-        text = title_instruction(creative=True)
+        text = title_instruction("creative")
         self.assertIn("evocative", text)
         self.assertIn("Astronaut in Red Spacesuit Under Radiant Desert Sky", text)
         self.assertIn("Wanderer Beneath a Burning Sky", text)
@@ -31,7 +35,7 @@ class TestTitleInstruction(unittest.TestCase):
         self.assertNotIn("{title_len}", text)
 
     def test_prompt_embeds_creative_title_instruction(self):
-        prompt = build_metadata_prompt(["title"], creative_title=True)
+        prompt = build_metadata_prompt(["title"], title_style="creative")
         self.assertIn("Wanderer Beneath a Burning Sky", prompt)
         self.assertNotIn("{title_instruction}", prompt)
 
@@ -47,7 +51,7 @@ class TestDescriptionInstruction(unittest.TestCase):
         self.assertNotIn("{desc_len}", text)
 
     def test_creative_is_short_story_with_limit(self):
-        text = description_instruction(creative=True)
+        text = description_instruction("creative")
         self.assertIn("short-story", text)
         self.assertIn(str(DESCRIPTION_STORY_MAX_LEN), text)
         self.assertNotIn("{desc_len}", text)
@@ -56,7 +60,7 @@ class TestDescriptionInstruction(unittest.TestCase):
         self.assertIn("If gender is unclear", text)
 
     def test_prompt_embeds_creative_description(self):
-        prompt = build_metadata_prompt(["description"], creative_description=True)
+        prompt = build_metadata_prompt(["description"], description_style="creative")
         self.assertIn("short-story", prompt)
         self.assertIn(str(DESCRIPTION_STORY_MAX_LEN), prompt)
         self.assertNotIn("{description_instruction}", prompt)
@@ -74,6 +78,66 @@ class TestDescriptionInstruction(unittest.TestCase):
     def test_truncate_description_without_max_len_is_unchanged_aside_from_whitespace(self):
         text = "A long default description can exceed three hundred seventy five characters easily when it is several sentences."
         self.assertEqual(truncate_description(text), text)
+
+
+class TestStyles(unittest.TestCase):
+    def test_every_style_has_a_formatted_instruction(self):
+        for style in TITLE_STYLES:
+            text = title_instruction(style)
+            self.assertTrue(text)
+            self.assertNotIn("{", text)
+        for style in DESCRIPTION_STYLES:
+            text = description_instruction(style)
+            self.assertTrue(text)
+            self.assertNotIn("{", text)
+
+    def test_title_styles_are_distinct(self):
+        self.assertEqual(len({title_instruction(s) for s in TITLE_STYLES}), len(TITLE_STYLES))
+
+    def test_editorial_title_is_subject_place_and_never_guesses(self):
+        text = title_instruction("editorial")
+        self.assertIn("Subject, Place", text)
+        self.assertIn("never guess a place", text)
+
+    def test_poetic_title_asks_for_verse_like_imagery(self):
+        self.assertIn("Amber Light Folding into Still Water", title_instruction("poetic"))
+
+    def test_literal_title_is_short_and_plain(self):
+        text = title_instruction("literal")
+        self.assertIn("2-5", text)
+        self.assertIn("no mood, metaphor, or decoration", text)
+
+    def test_caption_description_is_one_capped_sentence(self):
+        text = description_instruction("caption")
+        self.assertIn("single factual", text)
+        self.assertIn(str(DESCRIPTION_CAPTION_MAX_LEN), text)
+
+    def test_photographic_description_does_not_invent_camera_data(self):
+        text = description_instruction("photographic")
+        self.assertIn("light", text)
+        self.assertIn("do not invent camera", text)
+
+    def test_description_caps_depend_on_style(self):
+        self.assertEqual(description_max_len("creative"), DESCRIPTION_STORY_MAX_LEN)
+        self.assertEqual(description_max_len("caption"), DESCRIPTION_CAPTION_MAX_LEN)
+        self.assertIsNone(description_max_len("standard"))
+        self.assertIsNone(description_max_len("photographic"))
+
+    def test_unknown_styles_are_rejected(self):
+        with self.assertRaises(ValueError):
+            title_instruction("shouty")
+        with self.assertRaises(ValueError):
+            description_instruction("shouty")
+        with self.assertRaises(ValueError):
+            description_max_len("shouty")
+
+    def test_prompt_uses_each_fields_own_style(self):
+        prompt = build_metadata_prompt(
+            ["title", "description"], title_style="poetic", description_style="caption"
+        )
+        self.assertIn("lyrical, poetic title", prompt)
+        self.assertIn("photo-caption sentence", prompt)
+        self.assertNotIn("marketplace-style", prompt)
 
 
 class TestBuildMetadataPrompt(unittest.TestCase):
@@ -194,6 +258,25 @@ class TestProcessSingleImage(unittest.TestCase):
         )
         self.assertEqual(result["written"], ["title"])
         self.assertEqual(result["skipped"], ["keywords"])
+
+    def test_styles_reach_generation_and_the_description_cap(self):
+        image = FakeImage()
+        with patch("image_processor.read_exif_field", side_effect=image.read), \
+             patch("image_processor.generate_iptc_fields",
+                   return_value={"title": "T", "description": "D"}) as gen_iptc, \
+             patch("image_processor.write_iptc_fields", return_value=True) as write_iptc:
+            process_single_image(
+                self.path, "m", None, ["title", "description"], (),
+                title_style="editorial", description_style="caption",
+            )
+        self.assertEqual(gen_iptc.call_args.args[5:7], ("editorial", "caption"))
+        self.assertEqual(write_iptc.call_args.kwargs["description_max_len"], DESCRIPTION_CAPTION_MAX_LEN)
+
+    def test_unknown_style_is_rejected_before_any_work(self):
+        with self.assertRaises(ValueError):
+            process_single_image(self.path, "m", None, ["title"], (), title_style="shouty")
+        with self.assertRaises(ValueError):
+            process_single_image(self.path, "m", None, ["description"], (), description_style="shouty")
 
     def test_generated_alt_is_used_as_hint_for_iptc(self):
         _, _, _, gen_iptc, _ = self.run_fields(

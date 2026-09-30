@@ -36,6 +36,11 @@ KEYWORDS_TARGET_LEN = 500
 TITLE_MAX_LEN = 59
 # Creative short-story descriptions stay well under typical IPTC Caption-Abstract limits.
 DESCRIPTION_STORY_MAX_LEN = 375
+# Caption descriptions are a single sentence.
+DESCRIPTION_CAPTION_MAX_LEN = 200
+
+TITLE_STYLES = ("standard", "creative", "editorial", "poetic", "literal")
+DESCRIPTION_STYLES = ("standard", "creative", "caption", "photographic")
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
 DELAY_BETWEEN_REQUESTS = 2  # seconds
@@ -76,6 +81,65 @@ DESCRIPTION_INSTRUCTION_CREATIVE = (
     "or technical generation parameters."
 )
 
+TITLE_INSTRUCTION_EDITORIAL = (
+    "a concise editorial, photo-caption-style title in the form \"Subject, Place\" (for example "
+    "\"Koi Pond, Japanese Friendship Garden\"). Use a short noun phrase for the subject, with no verbs "
+    "or adjectives that are not plainly observable. Whenever the image or the additional context names "
+    "a place, the title must end with that place; shorten the subject to make room rather than dropping "
+    "the place. Omit the place only when neither the image nor the context identifies one, and never "
+    "guess a place. Use no more than {title_len} characters. Title Case. No quotation marks, "
+    "Midjourney prompts, job IDs, or file names."
+)
+
+TITLE_INSTRUCTION_POETIC = (
+    "a lyrical, poetic title with rhythm and concrete sensory imagery, like a line of verse or a haiku "
+    "fragment (for example \"Amber Light Folding into Still Water\"). Use no more than {title_len} characters. "
+    "Favor cadence and image over literal description, but stay recognizably about this image. "
+    "Title Case. No quotation marks, Midjourney prompts, job IDs, or file names."
+)
+
+TITLE_INSTRUCTION_LITERAL = (
+    "a plain, literal title that names only the main subject in as few words as possible (typically 2-5 "
+    "words, for example \"Red Door\" or \"Three Koi in a Pond\"). Do not pad it: no mood, metaphor, or "
+    "decoration, and mention the setting only when it is essential. Never exceed {title_len} characters. "
+    "Title Case. No quotation marks, Midjourney prompts, job IDs, or file names."
+)
+
+DESCRIPTION_INSTRUCTION_CAPTION = (
+    "a single factual, journalistic photo-caption sentence of at most {desc_len} characters that says "
+    "what or who is shown, what is happening, and where when that is identifiable. Present tense, plain "
+    "language, no interpretation or mood, and no adjectives that are not plainly observable. "
+    "No Midjourney prompts, job IDs, or technical generation parameters."
+)
+
+DESCRIPTION_INSTRUCTION_PHOTOGRAPHIC = (
+    "2-4 sentences in the voice of a photographer's artist statement, describing the photographic "
+    "qualities of the image: the light and its direction, color palette, composition and framing, depth "
+    "of field, texture, and the mood they create. Describe only what can be seen; do not invent camera "
+    "settings, lenses, or gear. No Midjourney prompts, job IDs, or technical generation parameters."
+)
+
+TITLE_INSTRUCTIONS = {
+    "standard": TITLE_INSTRUCTION_DEFAULT,
+    "creative": TITLE_INSTRUCTION_CREATIVE,
+    "editorial": TITLE_INSTRUCTION_EDITORIAL,
+    "poetic": TITLE_INSTRUCTION_POETIC,
+    "literal": TITLE_INSTRUCTION_LITERAL,
+}
+
+DESCRIPTION_INSTRUCTIONS = {
+    "standard": DESCRIPTION_INSTRUCTION_DEFAULT,
+    "creative": DESCRIPTION_INSTRUCTION_CREATIVE,
+    "caption": DESCRIPTION_INSTRUCTION_CAPTION,
+    "photographic": DESCRIPTION_INSTRUCTION_PHOTOGRAPHIC,
+}
+
+# Hard cap applied to the written description for styles that define one (others are uncapped).
+DESCRIPTION_MAX_LENS = {
+    "creative": DESCRIPTION_STORY_MAX_LEN,
+    "caption": DESCRIPTION_CAPTION_MAX_LEN,
+}
+
 FIELDS = ("alt", "title", "description", "keywords")
 IPTC_FIELDS = ("title", "description", "keywords")
 # exiftool tag checked to decide whether a field already has a value.
@@ -107,30 +171,42 @@ Produce ONLY a JSON object (no markdown fences, no other text) with exactly {key
 {spelling_notes}{context_block}"""
 
 
-def title_instruction(creative: bool = False) -> str:
-    """Title-generation instruction for the default (descriptive) or creative style."""
-    template = TITLE_INSTRUCTION_CREATIVE if creative else TITLE_INSTRUCTION_DEFAULT
-    return template.format(title_len=TITLE_MAX_LEN)
+def _check_style(style: str, allowed: tuple, kind: str) -> str:
+    if style not in allowed:
+        raise ValueError(f"Unknown {kind} style {style!r}; choose from: {', '.join(allowed)}")
+    return style
 
 
-def description_instruction(creative: bool = False) -> str:
-    """Description-generation instruction for the default prose or creative short story."""
-    if not creative:
-        return DESCRIPTION_INSTRUCTION_DEFAULT
-    return DESCRIPTION_INSTRUCTION_CREATIVE.format(desc_len=DESCRIPTION_STORY_MAX_LEN)
+def title_instruction(style: str = "standard") -> str:
+    """Title-generation instruction for the given style (see TITLE_STYLES)."""
+    _check_style(style, TITLE_STYLES, "title")
+    return TITLE_INSTRUCTIONS[style].format(title_len=TITLE_MAX_LEN)
+
+
+def description_instruction(style: str = "standard") -> str:
+    """Description-generation instruction for the given style (see DESCRIPTION_STYLES)."""
+    _check_style(style, DESCRIPTION_STYLES, "description")
+    template = DESCRIPTION_INSTRUCTIONS[style]
+    return template.format(desc_len=DESCRIPTION_MAX_LENS.get(style))
+
+
+def description_max_len(style: str = "standard") -> Optional[int]:
+    """Maximum length enforced on a written description of this style, or None for no cap."""
+    _check_style(style, DESCRIPTION_STYLES, "description")
+    return DESCRIPTION_MAX_LENS.get(style)
 
 
 def build_metadata_prompt(
     fields,
     hints=(),
     context: Optional[str] = None,
-    creative_title: bool = False,
-    creative_description: bool = False,
+    title_style: str = "standard",
+    description_style: str = "standard",
 ) -> str:
     """Prompt asking for exactly the requested IPTC fields (title, description, keywords)."""
     instructions = {
-        "title": title_instruction(creative_title),
-        "description": description_instruction(creative_description),
+        "title": title_instruction(title_style),
+        "description": description_instruction(description_style),
         "keywords": KEYWORDS_INSTRUCTION.format(keywords_len=KEYWORDS_TARGET_LEN),
     }
     wanted = [f for f in IPTC_FIELDS if f in fields]
@@ -357,8 +433,8 @@ def generate_iptc_fields(
     fields,
     alt: Optional[str] = None,
     context: Optional[str] = None,
-    creative_title: bool = False,
-    creative_description: bool = False,
+    title_style: str = "standard",
+    description_style: str = "standard",
 ) -> Optional[dict]:
     """One llm vision call for the requested IPTC fields (title, description, keywords).
 
@@ -377,7 +453,7 @@ def generate_iptc_fields(
         if existing_description:
             hints.append(f"existing description: {existing_description}")
 
-    prompt = build_metadata_prompt(wanted, hints, context, creative_title, creative_description)
+    prompt = build_metadata_prompt(wanted, hints, context, title_style, description_style)
     small_image = resize_image_for_llm(image_path)
     cmd = [llm_executable(), "-m", llm_model, "-a", str(small_image), prompt, *llm_option_args(model)]
     try:
@@ -408,8 +484,9 @@ def generate_iptc_fields(
         if "title" in values:
             values["title"] = truncate_title(values["title"])
         if "description" in values:
-            max_len = DESCRIPTION_STORY_MAX_LEN if creative_description else None
-            values["description"] = truncate_description(values["description"], max_len)
+            values["description"] = truncate_description(
+                values["description"], description_max_len(description_style)
+            )
         if "keywords" in values:
             values["keywords"] = truncate_keywords(values["keywords"])
         return values
@@ -484,12 +561,13 @@ def process_single_image(
     context: Optional[str] = None,
     fields=(),
     overwrite=(),
-    creative_title: bool = False,
-    creative_description: bool = False,
+    title_style: str = "standard",
+    description_style: str = "standard",
 ) -> dict:
     """Generate and write the selected metadata fields for one image. Pure logic, no printing.
 
     fields: which of "alt", "title", "description", "keywords" to generate.
+    title_style / description_style: writing style for those fields (TITLE_STYLES, DESCRIPTION_STYLES).
     overwrite: which selected fields may replace an existing value. A selected field that
       already has a value and is not in overwrite is skipped; the others still run.
 
@@ -506,6 +584,8 @@ def process_single_image(
         raise ValueError(f"Unknown field(s): {', '.join(sorted(unknown))}")
     if not fields:
         raise ValueError("Select at least one field to generate.")
+    _check_style(title_style, TITLE_STYLES, "title")
+    _check_style(description_style, DESCRIPTION_STYLES, "description")
 
     result = {
         "status": "error",
@@ -559,14 +639,14 @@ def process_single_image(
     iptc_todo = [f for f in IPTC_FIELDS if f in todo]
     if iptc_todo:
         values = generate_iptc_fields(
-            image_path, model, iptc_todo, alt_hint, context, creative_title, creative_description
+            image_path, model, iptc_todo, alt_hint, context, title_style, description_style
         )
         if not values:
             result["failed"].update({f: "none generated" for f in iptc_todo})
         elif not write_iptc_fields(
             image_path,
             **values,
-            description_max_len=DESCRIPTION_STORY_MAX_LEN if creative_description else None,
+            description_max_len=description_max_len(description_style),
         ):
             result["failed"].update({f: "write failed" for f in iptc_todo})
         else:

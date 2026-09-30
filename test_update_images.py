@@ -58,6 +58,41 @@ class TestParseArgs(unittest.TestCase):
             parse_error("--title", "--creative-description"),
         )
 
+    def test_styles_default_to_standard(self):
+        args = parse("--title", "--description")
+        self.assertEqual((args.title_style, args.description_style), ("standard", "standard"))
+
+    def test_style_flags_select_each_fields_style(self):
+        args = parse(
+            "--title", "--description",
+            "--title-style", "editorial", "--description-style", "photographic",
+        )
+        self.assertEqual((args.title_style, args.description_style), ("editorial", "photographic"))
+
+    def test_creative_flags_are_shortcuts_for_the_creative_style(self):
+        args = parse("--title", "--description", "--creative-title", "--creative-description")
+        self.assertEqual((args.title_style, args.description_style), ("creative", "creative"))
+
+    def test_creative_shortcut_may_repeat_the_same_style(self):
+        self.assertEqual(parse("--title", "--creative-title", "--title-style", "creative").title_style, "creative")
+
+    def test_creative_shortcut_conflicts_with_a_different_style(self):
+        self.assertIn(
+            "--creative-title conflicts with --title-style literal",
+            parse_error("--title", "--creative-title", "--title-style", "literal"),
+        )
+
+    def test_style_requires_its_field(self):
+        self.assertIn("--title-style requires --title", parse_error("--alt", "--title-style", "poetic"))
+        self.assertIn(
+            "--description-style requires --description",
+            parse_error("--title", "--description-style", "caption"),
+        )
+
+    def test_styles_only_accept_their_own_choices(self):
+        parse_error("--title", "--title-style", "caption")
+        parse_error("--description", "--description-style", "poetic")
+
     def test_context_option_is_not_discarded(self):
         self.assertEqual(parse("--alt", "--context", "Koi pond").context, "Koi pond")
         self.assertEqual(parse("--alt", "-c", "Koi pond").context, "Koi pond")
