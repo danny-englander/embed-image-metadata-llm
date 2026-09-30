@@ -299,6 +299,20 @@ def resolve_llm_model_id(model_name: str) -> Optional[str]:
         return None
 
 
+def llm_option_args(model_name: str) -> list:
+    """Return llm -o arguments from the model's `settings` in models.yaml."""
+    try:
+        with open(MODELS_CONFIG) as f:
+            models = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return []
+    settings = (models.get(model_name) or {}).get("settings") or {}
+    args = []
+    for key, value in settings.items():
+        args.extend(["-o", key, str(value)])
+    return args
+
+
 def resize_image_for_llm(image_path: Path, max_dimension: int = 1024) -> Path:
     """Return path to a resized image for LLM processing (temp file if resized)."""
     with Image.open(image_path) as img:
@@ -362,7 +376,7 @@ def generate_iptc_metadata(
         context_block=context_block,
     )
     small_image = resize_image_for_llm(image_path)
-    cmd = ["llm", "-m", llm_model, "-a", str(small_image), prompt]
+    cmd = ["llm", "-m", llm_model, "-a", str(small_image), prompt, *llm_option_args(model)]
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, stdin=subprocess.DEVNULL
@@ -427,7 +441,7 @@ def generate_title_only(
         context_block=context_block,
     )
     small_image = resize_image_for_llm(image_path)
-    cmd = ["llm", "-m", llm_model, "-a", str(small_image), prompt]
+    cmd = ["llm", "-m", llm_model, "-a", str(small_image), prompt, *llm_option_args(model)]
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, stdin=subprocess.DEVNULL

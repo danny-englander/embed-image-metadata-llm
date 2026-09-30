@@ -1,6 +1,7 @@
 import unittest
 
 from image_processor import (
+    llm_option_args,
     DESCRIPTION_STORY_MAX_LEN,
     IPTC_META_PROMPT,
     TITLE_MAX_LEN,
@@ -91,6 +92,14 @@ class TestDescriptionInstruction(unittest.TestCase):
     def test_truncate_description_without_max_len_is_unchanged_aside_from_whitespace(self):
         text = "A long default description can exceed three hundred seventy five characters easily when it is several sentences."
         self.assertEqual(truncate_description(text), text)
+
+
+class TestLlmOptionArgs(unittest.TestCase):
+    def test_model_without_settings_has_no_options(self):
+        self.assertEqual(llm_option_args("claude-sonnet-4-6"), [])
+
+    def test_unknown_model_has_no_options(self):
+        self.assertEqual(llm_option_args("no-such-model"), [])
 
 
 if __name__ == "__main__":
