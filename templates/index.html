@@ -18,6 +18,7 @@
       --skip: #fbbf24;
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       background: var(--bg);
@@ -62,14 +63,19 @@
     .drop-zone .drop-zone-text { color: var(--text); }
     .drop-zone .drop-zone-count { margin-top: 0.35rem; }
     .fallback-label { font-weight: 400; color: var(--muted); margin: 0.5rem 0 0.35rem; }
-    .radio-row { display: flex; gap: 1.25rem; flex-wrap: wrap; }
-    .radio-row label, .checkbox-row label {
+    .field-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .field-row { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+    .field-row label {
       font-weight: 400;
       display: flex;
       align-items: center;
       gap: 0.4rem;
       margin: 0;
     }
+    .field-row label.field-name { font-weight: 600; min-width: 10rem; }
+    .field-row label.dependent { color: var(--muted); }
+    .field-row label.dependent:has(input:disabled) { opacity: 0.5; }
+    .field-hint { margin: 0.25rem 0 0 1.4rem; }
     .hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
     button {
       background: var(--accent);
@@ -88,6 +94,43 @@
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; }
+    .results-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    .result-item { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+    .result-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; }
+    summary.result-head { cursor: pointer; list-style: none; }
+    summary.result-head::-webkit-details-marker { display: none; }
+    summary.result-head::after { content: "▸"; color: var(--muted); transition: transform 0.15s; }
+    details[open] > summary.result-head::after { transform: rotate(90deg); }
+    summary.result-head:hover { background: rgba(255, 255, 255, 0.03); }
+    .thumb {
+      width: 56px; height: 56px; flex: none; border-radius: 6px; overflow: hidden;
+      background: var(--border); display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 0.7rem; text-transform: uppercase;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .result-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+    .result-status { font-size: 0.85rem; }
+    .status-pending { color: var(--muted); }
+    .result-body { padding: 0 0.75rem 0.75rem; }
+    .result-body table { table-layout: fixed; }
+    .result-body th:nth-child(1) { width: 8.5rem; }
+    .result-body th:nth-child(2) { width: 9.5rem; }
+    .result-body td.value { overflow-wrap: anywhere; white-space: pre-wrap; }
+    .result-body td.value.kept { color: var(--muted); }
+    .result-body .chars { color: var(--muted); font-size: 0.8rem; }
+    .result-note { color: var(--muted); margin: 0.5rem 0 0; }
+    @media (max-width: 600px) {
+      /* Stack each field into a card: field + outcome on one line, value beneath. */
+      .result-body table, .result-body tbody { display: block; }
+      .result-body thead { display: none; }
+      .result-body tr {
+        display: grid; grid-template-columns: 1fr auto; column-gap: 0.75rem;
+        padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+      }
+      .result-body td { border: none; padding: 0.1rem 0; }
+      .result-body td:nth-child(2) { text-align: right; }
+      .result-body td.value { grid-column: 1 / -1; }
+    }
     .status-written { color: var(--ok); font-weight: 600; }
     .status-skipped { color: var(--skip); font-weight: 600; }
     .status-error { color: var(--err); font-weight: 600; }
@@ -97,7 +140,7 @@
 <body>
 <main>
   <h1>Image Caption</h1>
-  <p class="sub">Bulk-generate alt text (and optional IPTC metadata) for a batch of images.</p>
+  <p class="sub">Bulk-generate alt text and IPTC title, description, and keywords for a batch of images.</p>
 
   <form id="upload-form" class="panel" enctype="multipart/form-data">
     <div class="field">
@@ -131,26 +174,38 @@
     </div>
 
     <div class="field">
-      <label>Mode</label>
-      <div class="radio-row">
-        <label><input type="radio" name="mode" value="alt" checked> Alt text only</label>
-        <label><input type="radio" name="mode" value="iptc"> Alt text + IPTC (Title, Description, Keywords)</label>
-        <label><input type="radio" name="mode" value="title_only"> Title only</label>
+      <label>Fields to generate</label>
+      <p class="hint" style="margin-top:0; margin-bottom:0.75rem;">Pick at least one. A field that already has a value is skipped unless its Overwrite box is checked.</p>
+      <div class="field-list">
+        <div>
+          <div class="field-row">
+            <label class="field-name"><input type="checkbox" name="alt" data-field="alt"> Alt text</label>
+            <label class="dependent"><input type="checkbox" name="overwrite_alt" data-overwrite-for="alt" disabled> Overwrite existing</label>
+          </div>
+        </div>
+        <div>
+          <div class="field-row">
+            <label class="field-name"><input type="checkbox" name="title" data-field="title"> IPTC Title</label>
+            <label class="dependent"><input type="checkbox" name="overwrite_title" data-overwrite-for="title" disabled> Overwrite existing</label>
+            <label class="dependent"><input type="checkbox" name="creative_title" id="creative_title" data-style-for="title" disabled> Creative title</label>
+          </div>
+          <p class="hint field-hint">Creative titles are more evocative and artistic (e.g. “Wanderer Beneath a Burning Sky”) instead of a literal marketplace title like “Astronaut in Red Spacesuit Under Radiant Desert Sky”.</p>
+        </div>
+        <div>
+          <div class="field-row">
+            <label class="field-name"><input type="checkbox" name="description" data-field="description"> IPTC Description</label>
+            <label class="dependent"><input type="checkbox" name="overwrite_description" data-overwrite-for="description" disabled> Overwrite existing</label>
+            <label class="dependent"><input type="checkbox" name="creative_description" id="creative_description" data-style-for="description" disabled> Creative description</label>
+          </div>
+          <p class="hint field-hint">Creative descriptions are a short-story vignette instead of 3–4 descriptive sentences, capped at 375 characters.</p>
+        </div>
+        <div>
+          <div class="field-row">
+            <label class="field-name"><input type="checkbox" name="keywords" data-field="keywords"> IPTC Keywords</label>
+            <label class="dependent"><input type="checkbox" name="overwrite_keywords" data-overwrite-for="keywords" disabled> Overwrite existing</label>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <div class="field checkbox-row" id="title-style-field" hidden>
-      <label><input type="checkbox" name="creative_title" id="creative_title"> Creative titles</label>
-      <p class="hint">More evocative and artistic (e.g. “Wanderer Beneath a Burning Sky”) instead of a literal marketplace title like “Astronaut in Red Spacesuit Under Radiant Desert Sky”.</p>
-    </div>
-
-    <div class="field checkbox-row" id="description-style-field" hidden>
-      <label><input type="checkbox" name="creative_description" id="creative_description"> Creative descriptions</label>
-      <p class="hint">A short-story vignette instead of 3–4 descriptive sentences, capped at 375 characters.</p>
-    </div>
-
-    <div class="field checkbox-row">
-      <label><input type="checkbox" name="force"> Overwrite existing alt text</label>
     </div>
 
     <button type="submit" id="submit-btn">Upload &amp; Process</button>
@@ -163,15 +218,11 @@
   </div>
 
   <div class="panel" id="results-panel">
-    <h2 style="font-size:1.1rem;">Results</h2>
-    <table>
-      <thead>
-        <tr><th>File</th><th>Status</th></tr>
-      </thead>
-      <tbody id="results-body"></tbody>
-    </table>
-    <div class="actions">
+    <h2 id="results-title" style="font-size:1.1rem;">Results</h2>
+    <ul class="results-list" id="results-list"></ul>
+    <div class="actions" id="results-actions" hidden>
       <a id="download-link" href="#" style="display:none;"><button type="button">Download tagged images (.zip)</button></a>
+      <button type="button" class="secondary" id="rerun-btn" hidden title="Process the same images again using the options currently selected above">Run again</button>
       <button type="button" class="secondary" id="reset-btn">Start a new batch</button>
     </div>
   </div>
@@ -190,24 +241,36 @@ const progressPanel = document.getElementById("progress-panel");
 const progressLabel = document.getElementById("progress-label");
 const progressBar = document.getElementById("progress-bar");
 const resultsPanel = document.getElementById("results-panel");
-const resultsBody = document.getElementById("results-body");
+const resultsList = document.getElementById("results-list");
 const downloadLink = document.getElementById("download-link");
 const resetBtn = document.getElementById("reset-btn");
-const titleStyleField = document.getElementById("title-style-field");
-const descriptionStyleField = document.getElementById("description-style-field");
+const rerunBtn = document.getElementById("rerun-btn");
+const resultsTitle = document.getElementById("results-title");
+const resultsActions = document.getElementById("results-actions");
 
 let pollTimer = null;
+let jobRunning = false;
+let hasFinishedJob = false;
+let thumbUrls = [];
 
-function syncStyleOptionsVisibility() {
-  const mode = form.querySelector('input[name="mode"]:checked')?.value;
-  titleStyleField.hidden = mode === "alt";
-  descriptionStyleField.hidden = mode !== "iptc";
+const fieldBoxes = Array.from(form.querySelectorAll("input[data-field]"));
+
+function syncFieldOptions() {
+  fieldBoxes.forEach((box) => {
+    // Overwrite and style boxes are only meaningful (and submitted) while their field is selected.
+    form
+      .querySelectorAll(
+        `input[data-overwrite-for="${box.dataset.field}"], input[data-style-for="${box.dataset.field}"]`
+      )
+      .forEach((dependent) => {
+        dependent.disabled = !box.checked;
+        if (!box.checked) dependent.checked = false;
+      });
+  });
 }
 
-form.querySelectorAll('input[name="mode"]').forEach((input) => {
-  input.addEventListener("change", syncStyleOptionsVisibility);
-});
-syncStyleOptionsVisibility();
+fieldBoxes.forEach((box) => box.addEventListener("change", syncFieldOptions));
+syncFieldOptions();
 
 function isAcceptedFile(file) {
   const name = file.name.toLowerCase();
@@ -217,6 +280,22 @@ function isAcceptedFile(file) {
 function updateFileCount() {
   const n = imagesInput.files.length;
   fileCountLabel.textContent = n === 0 ? "" : `${n} file${n === 1 ? "" : "s"} selected`;
+  if (!jobRunning) renderSelection();
+}
+
+// Show thumbnails for the chosen files right away, before anything is uploaded.
+function renderSelection() {
+  revokeThumbs();
+  rows.clear();
+  resultsList.replaceChildren();
+  progressPanel.style.display = "none";
+  hasFinishedJob = false;
+  const byName = new Map(Array.from(imagesInput.files).filter(isAcceptedFile).map((f) => [f.name, f]));
+  const files = Array.from(byName.values()).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  resultsTitle.textContent = `Selected images (${files.length})`;
+  resultsActions.hidden = true;
+  resultsPanel.style.display = files.length ? "block" : "none";
+  files.forEach((f) => rows.set(f.name, createRow({ saved: f.name, original: f.name }, f, "ready")));
 }
 
 function addFiles(fileList) {
@@ -258,19 +337,128 @@ dropZone.addEventListener("drop", (e) => {
   }
 });
 
-function escapeHtml(s) {
-  const div = document.createElement("div");
-  div.textContent = s ?? "";
-  return div.innerHTML;
+const FIELD_ROWS = [
+  ["alt", "Alt text"],
+  ["title", "IPTC Title"],
+  ["description", "IPTC Description"],
+  ["keywords", "IPTC Keywords"],
+];
+
+// saved filename -> { li, thumb, name, status, done }
+const rows = new Map();
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
-function renderResults(results) {
-  resultsBody.innerHTML = results.map(r => {
-    return `<tr>
-      <td>${escapeHtml(r.filename)}</td>
-      <td class="status-${r.status}">${escapeHtml(r.status)}</td>
-    </tr>`;
-  }).join("");
+function makeThumb(file, name) {
+  const thumb = el("div", "thumb");
+  const fallback = () => {
+    thumb.replaceChildren();
+    thumb.textContent = (name.split(".").pop() || "img").slice(0, 4);
+  };
+  if (!file) {
+    fallback();
+    return thumb;
+  }
+  const img = document.createElement("img");
+  img.alt = "";
+  img.addEventListener("error", fallback); // e.g. HEIC, which most browsers can't display
+  const url = URL.createObjectURL(file);
+  thumbUrls.push(url);
+  img.src = url;
+  thumb.appendChild(img);
+  return thumb;
+}
+
+function revokeThumbs() {
+  thumbUrls.forEach((u) => URL.revokeObjectURL(u));
+  thumbUrls = [];
+}
+
+function createRow(entry, file, statusText = "queued") {
+  const li = el("li");
+  const head = el("div", "result-head");
+  const row = {
+    li,
+    thumb: makeThumb(file, entry.original),
+    name: el("span", "result-name", entry.original),
+    status: el("span", "result-status status-pending", statusText),
+    done: false,
+  };
+  head.append(row.thumb, row.name, row.status);
+  li.className = "result-item";
+  li.appendChild(head);
+  resultsList.appendChild(li);
+  return row;
+}
+
+function fieldRows(r) {
+  const out = [];
+  for (const [key, label] of FIELD_ROWS) {
+    if (r.written.includes(key)) {
+      out.push({ label, cls: "written", outcome: "Written", value: r[key] });
+    } else if (r.skipped.includes(key)) {
+      out.push({ label, cls: "skipped", outcome: "Skipped, already set", value: r.existing[key], kept: true });
+    } else if (key in r.failed) {
+      out.push({ label, cls: "error", outcome: `Failed: ${r.failed[key]}`, value: "" });
+    }
+  }
+  return out;
+}
+
+function buildTable(rowsData) {
+  const table = el("table");
+  const head = el("thead");
+  const headRow = el("tr");
+  ["Field", "Outcome", "Value"].forEach((h) => headRow.appendChild(el("th", null, h)));
+  head.appendChild(headRow);
+  const body = el("tbody");
+  rowsData.forEach((d) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, d.label));
+    tr.appendChild(el("td", `status-${d.cls}`, d.outcome));
+    const value = el("td", d.kept ? "value kept" : "value", d.value || "");
+    if (d.value && !d.kept) value.appendChild(el("span", "chars", `  (${d.value.length} chars)`));
+    tr.appendChild(value);
+    body.appendChild(tr);
+  });
+  table.append(head, body);
+  return table;
+}
+
+function renderResult(r) {
+  const row = rows.get(r.filename);
+  if (!row || row.done) return;
+  row.done = true;
+
+  row.status.className = `result-status status-${r.status}`;
+  row.status.textContent = r.status;
+
+  const summary = el("summary", "result-head");
+  summary.append(row.thumb, row.name, row.status);
+  const body = el("div", "result-body");
+  const data = fieldRows(r);
+  if (data.length) body.appendChild(buildTable(data));
+  // The table already says what was written/skipped; the message adds detail for errors.
+  if (r.message && (!data.length || r.status === "error")) {
+    body.appendChild(el("p", "result-note", r.message));
+  }
+
+  const details = el("details");
+  details.append(summary, body);
+  row.li.replaceChildren(details);
+}
+
+function markProcessing() {
+  const pending = Array.from(rows.values()).filter((r) => !r.done);
+  pending.forEach((row, i) => {
+    const active = i === 0;
+    row.status.textContent = active ? "processing…" : "queued";
+  });
 }
 
 async function poll(jobId) {
@@ -279,26 +467,42 @@ async function poll(jobId) {
     clearInterval(pollTimer);
     errorBox.style.display = "block";
     errorBox.textContent = "Lost track of the job. Please try again.";
+    jobRunning = false;
+    submitBtn.disabled = false;
     return;
   }
   const job = await res.json();
   progressLabel.textContent = `Processing ${job.done} / ${job.total}…`;
   progressBar.value = job.total ? job.done / job.total : 0;
   resultsPanel.style.display = "block";
-  renderResults(job.results);
+  job.results.forEach(renderResult);
+  markProcessing();
 
   if (job.state === "done") {
     clearInterval(pollTimer);
     progressLabel.textContent = `Done: ${job.done} / ${job.total}`;
     downloadLink.href = `/jobs/${jobId}/download`;
     downloadLink.style.display = "inline-block";
+    rerunBtn.hidden = false;
+    hasFinishedJob = true;
+    jobRunning = false;
+    submitBtn.disabled = false;
   }
 }
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   errorBox.style.display = "none";
+  if (!fieldBoxes.some((box) => box.checked)) {
+    errorBox.style.display = "block";
+    errorBox.textContent = "Select at least one field to generate.";
+    errorBox.scrollIntoView({ block: "center" });
+    return;
+  }
+  clearInterval(pollTimer);
   submitBtn.disabled = true;
+  jobRunning = true;
+  rerunBtn.hidden = true;
 
   const data = new FormData(form);
   try {
@@ -307,6 +511,15 @@ form.addEventListener("submit", async (e) => {
     if (!res.ok) {
       throw new Error(body.error || "Upload failed.");
     }
+    const fileByName = new Map(Array.from(imagesInput.files).map((f) => [f.name, f]));
+    revokeThumbs();
+    resultsList.replaceChildren();
+    rows.clear();
+    resultsTitle.textContent = "Results";
+    resultsActions.hidden = false;
+    body.files.forEach((entry) => rows.set(entry.saved, createRow(entry, fileByName.get(entry.original))));
+    markProcessing();
+    resultsPanel.style.display = "block";
     progressPanel.style.display = "block";
     progressLabel.textContent = "Processing…";
     progressBar.value = 0;
@@ -317,8 +530,13 @@ form.addEventListener("submit", async (e) => {
     errorBox.style.display = "block";
     errorBox.textContent = err.message;
     submitBtn.disabled = false;
+    jobRunning = false;
+    rerunBtn.hidden = !hasFinishedJob; // earlier results are still on screen
   }
 });
+
+// Re-submit the same images with whatever options are currently ticked.
+rerunBtn.addEventListener("click", () => form.requestSubmit());
 
 resetBtn.addEventListener("click", () => {
   window.location.reload();
