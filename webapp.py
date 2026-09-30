@@ -2,15 +2,21 @@
 """Web UI for embed-image-metadata-llm: bulk-upload images, run them through the same
 processing pipeline as update-images.py, and download the tagged files.
 
-Run with: flask --app webapp run
+Run with: python webapp.py            (this machine only)
+          python webapp.py --host 0.0.0.0   (reachable from other devices on your network)
+or:       flask --app webapp run
 """
 
+import argparse
+import os
 import shutil
+import socket
 import tempfile
 import threading
 import time
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
@@ -199,5 +205,60 @@ def job_download(job_id):
     return send_file(zip_path, as_attachment=True, download_name="tagged-images.zip")
 
 
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+ALL_INTERFACES = ("0.0.0.0", "::")
+
+
+def lan_ip() -> Optional[str]:
+    """Best-effort address of this machine on the local network (sends no packets)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("10.255.255.255", 1))
+        return sock.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        sock.close()
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the web UI.")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Address to listen on (default: 127.0.0.1, this machine only). "
+        "Use 0.0.0.0 to reach the app from other devices on your network, e.g. your phone.",
+    )
+    parser.add_argument("--port", type=int, default=5000, help="Port to listen on (default: 5000)")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable Flask's debugger and auto-reloader (this machine only)",
+    )
+    args = parser.parse_args(argv)
+    if args.debug and args.host not in LOOPBACK_HOSTS:
+        parser.error(
+            "--debug is only allowed with a local --host (127.0.0.1): the debugger lets anyone "
+            "who can reach the server run code on this machine"
+        )
+    return args
+
+
+def main() -> None:
+    args = parse_args()
+    # The auto-reloader runs this twice; only announce from the parent process.
+    if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        print(f"Local:   http://127.0.0.1:{args.port}")
+        if args.host in ALL_INTERFACES:
+            ip = lan_ip()
+            if ip:
+                print(f"Network: http://{ip}:{args.port}  (open this on your phone, same Wi-Fi)")
+            print(
+                "Warning: the app has no login. Anyone on your network can upload images and "
+                "spend your API credit while this is running."
+            )
+    app.run(host=args.host, port=args.port, debug=args.debug)
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    main()
