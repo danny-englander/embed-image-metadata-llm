@@ -22,11 +22,11 @@ This document describes what each script does, how they differ, and whether they
 
 **What it does**
 
-- Scans a **directory you specify** for images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.heic`, `.webp`).
+- Scans a **directory you specify** for images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.heic`, `.heif`, `.webp`).
 - You choose which fields to generate, independently: **`--alt`**, **`--title`**, **`--description`**, **`--keywords`** (at least one is required).
 - For each selected field that is empty (or whose `--overwrite-*` flag is given):
   - **Alt text** – calls **caption.py** (Anthropic/LLM via `llm` + `llm-anthropic`) and writes the **XMP Alt Text (Accessibility)** field using **exiftool** (limit 250 chars).
-  - **Title / Description / Keywords** – one LLM call for whichever of the three are needed: a Title (up to 59 chars), Description (3–4 sentences, or a ≤375-character short story with `--creative-description`), and ~500-character Keywords. Written to IPTC Core `Title`/`ObjectName`, `Description`/`Caption-Abstract`, and `Keywords`/`Subject` (full replace, not append).
+  - **Title / Description / Keywords** – one LLM call for whichever of the three are needed: a Title (up to 59 chars), Description (3–4 sentences by default; other styles via `--title-style` / `--description-style`), and ~500-character Keywords. Written to IPTC Core `Title`/`ObjectName`, `Description`/`Caption-Abstract`, and `Keywords`/`Subject` (full replace, not append).
 - A selected field that already has a value is skipped unless its overwrite flag is given; other selected fields still run.
 - No remote API and no `AUTH_TOKEN`. Requires:
   - `exiftool` (e.g. `brew install exiftool`)
@@ -54,8 +54,10 @@ python update-images.py /path/to/folder --keywords --overwrite-keywords
 - `--model` – model passed to caption.py (default: `claude-sonnet-5-5`).
 - `--alt`, `--title`, `--description`, `--keywords` – the fields to generate (select at least one).
 - `--overwrite-alt`, `--overwrite-title`, `--overwrite-description`, `--overwrite-keywords` – replace an existing value for that field (requires the matching field flag). Without it, a field that is already set is skipped.
-- `--creative-title` – with `--title`, generate evocative titles instead of descriptive marketplace-style ones.
-- `--creative-description` – with `--description`, write the Description as a creative short story of at most 375 characters.
+- `--overwrite-all` – replace existing values for every selected field.
+- `--title-style` – with `--title`: `standard` (default), `creative`, `editorial`, `poetic`, or `literal`.
+- `--description-style` – with `--description`: `standard` (default), `creative` (short story, ≤375 characters), `caption` (one sentence, ≤200 characters), or `photographic`.
+- `--creative-title`, `--creative-description` – shortcuts for the `creative` style of each.
 ---
 
 ## update-images.py
