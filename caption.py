@@ -28,11 +28,11 @@ import os
 import subprocess
 import re
 import yaml
-from PIL import Image
 import time
 from collections import defaultdict
 from tempfile import gettempdir
 
+from imaging import llm_executable, resize_for_llm
 from replacements import apply_replacements, replacement_prompt_notes
 from term import BOLD, CYAN, DIM, GREEN, MAGENTA, RED, YELLOW, paint
 
@@ -55,7 +55,11 @@ def load_models():
             models = yaml.safe_load(f)
 
         # Get installed models from CLI
-        result = subprocess.run(["llm", "models"], capture_output=True, text=True)
+        try:
+            result = subprocess.run([llm_executable(), "models"], capture_output=True, text=True)
+        except FileNotFoundError:
+            # Not the models.yaml handler below: report the real problem, and don't exit the process.
+            raise Exception("the 'llm' command was not found (activate the virtualenv: source .venv/bin/activate)")
         if result.returncode != 0:
             print(paint(f"Error running 'llm models': {result.stderr}", BOLD, RED))
             raise Exception("Failed to get model list")
@@ -174,22 +178,8 @@ def verify_image_path(image_path: str) -> bool:
 def resize_image(
     image_path: str, debug: bool = False, max_dimension: int = 1024
 ) -> str:
-    """Return path to a resized image for LLM processing."""
-    path = Path(image_path)
-    with Image.open(path) as img:
-        # Return original path if image is small enough
-        if max(img.size) <= max_dimension:
-            return image_path
-
-        # Resize while preserving aspect ratio
-        img.thumbnail((max_dimension, max_dimension))
-
-        # Create temp file path with original extension
-        temp_path = Path(gettempdir()) / f"resized-llm-image{path.suffix}"
-
-        # Save resized image to temp location
-        img.save(temp_path, optimize=True)
-        return str(temp_path)
+    """Return path to an LLM-acceptable image (resized, and converted to JPEG if HEIC/HEIF)."""
+    return str(resize_for_llm(image_path, "resized-llm-image", max_dimension))
 
 
 def process_image(
@@ -242,7 +232,7 @@ def run_llm_command(
 
     try:
         # Base command
-        cmd = ["llm", "-m", model_config["model"]]
+        cmd = [llm_executable(), "-m", model_config["model"]]
 
         # Add attachment for image
         cmd.extend(["-a", str(image_path)])

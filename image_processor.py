@@ -16,6 +16,7 @@ from typing import Optional
 import yaml
 from PIL import Image
 
+from imaging import llm_executable, resize_for_llm
 from replacements import apply_replacements, replacement_prompt_notes
 from term import BOLD, DIM, RED, paint
 
@@ -42,7 +43,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 CAPTION_SCRIPT = SCRIPT_DIR / "caption.py"
 MODELS_CONFIG = SCRIPT_DIR / "models.yaml"
 
-EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".heic", ".webp")
+EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".heic", ".heif", ".webp")
 
 TITLE_INSTRUCTION_DEFAULT = (
     "a concise marketplace-style title for the artwork. Use as much of {title_len} characters "
@@ -78,11 +79,12 @@ DESCRIPTION_INSTRUCTION_CREATIVE = (
 FIELDS = ("alt", "title", "description", "keywords")
 IPTC_FIELDS = ("title", "description", "keywords")
 # exiftool tag checked to decide whether a field already has a value.
+# A field counts as set if any of its tags has a value (HEIC has no IPTC, so keywords live in XMP Subject).
 EXISTING_TAGS = {
-    "alt": "AltTextAccessibility",
-    "title": "Title",
-    "description": "Description",
-    "keywords": "Keywords",
+    "alt": ("AltTextAccessibility",),
+    "title": ("Title",),
+    "description": ("Description",),
+    "keywords": ("Keywords", "Subject"),
 }
 FIELD_LABELS = {
     "alt": "alt text",
@@ -320,14 +322,8 @@ def llm_option_args(model_name: str) -> list:
 
 
 def resize_image_for_llm(image_path: Path, max_dimension: int = 1024) -> Path:
-    """Return path to a resized image for LLM processing (temp file if resized)."""
-    with Image.open(image_path) as img:
-        if max(img.size) <= max_dimension:
-            return image_path
-        img.thumbnail((max_dimension, max_dimension))
-        temp_path = Path(gettempdir()) / f"resized-llm-iptc{image_path.suffix}"
-        img.save(temp_path, optimize=True)
-        return temp_path
+    """Return path to an LLM-acceptable image (temp file if resized or converted from HEIC/HEIF)."""
+    return resize_for_llm(image_path, "resized-llm-iptc", max_dimension)
 
 
 def parse_iptc_json(raw: str) -> Optional[dict]:
@@ -383,7 +379,7 @@ def generate_iptc_fields(
 
     prompt = build_metadata_prompt(wanted, hints, context, creative_title, creative_description)
     small_image = resize_image_for_llm(image_path)
-    cmd = ["llm", "-m", llm_model, "-a", str(small_image), prompt, *llm_option_args(model)]
+    cmd = [llm_executable(), "-m", llm_model, "-a", str(small_image), prompt, *llm_option_args(model)]
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, stdin=subprocess.DEVNULL
@@ -455,6 +451,15 @@ def generate_alt_text(
         return None
 
 
+def _existing_value(image_path: Path, field: str) -> Optional[str]:
+    """Current value of a field in the image, or None if it has none."""
+    for tag in EXISTING_TAGS[field]:
+        value = read_exif_field(image_path, tag)
+        if value:
+            return value
+    return None
+
+
 def _summary(result: dict) -> str:
     """Human-readable one-line summary built from a result's written/skipped/failed lists."""
     parts = []
@@ -519,7 +524,7 @@ def process_single_image(
     for field in FIELDS:
         if field not in fields:
             continue
-        current = None if field in overwrite else read_exif_field(image_path, EXISTING_TAGS[field])
+        current = None if field in overwrite else _existing_value(image_path, field)
         if current:
             result["skipped"].append(field)
             result["existing"][field] = current
