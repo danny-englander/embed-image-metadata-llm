@@ -5,6 +5,8 @@ claude-sonnet-5-5:
   model: anthropic/claude-sonnet-5-5
   prompt: You are a helpful alt-text generator assisting visually impaired users. Generate a clear and concise caption (15-30 words) that highlights the most important subject and action. Focus only on essential details, avoiding unnecessary background elements. Use simple, everyday language and avoid overly descriptive or poetic words.
   provider: anthropic
+  settings:
+    thinking_effort: medium
 
 claude-sonnet-4-6:
   deployment: cloud

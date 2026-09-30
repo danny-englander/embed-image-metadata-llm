@@ -95,6 +95,11 @@ class TestDescriptionInstruction(unittest.TestCase):
 
 
 class TestLlmOptionArgs(unittest.TestCase):
+    def test_sonnet_5_5_uses_medium_thinking_effort(self):
+        self.assertEqual(
+            llm_option_args("claude-sonnet-5-5"), ["-o", "thinking_effort", "medium"]
+        )
+
     def test_model_without_settings_has_no_options(self):
         self.assertEqual(llm_option_args("claude-sonnet-4-6"), [])
 
