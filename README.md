@@ -298,9 +298,9 @@ source .venv/bin/activate
 python webapp.py
 ```
 
-Then open http://127.0.0.1:5000. (`flask --app webapp run` works too.)
+Then open http://127.0.0.1:5001. (`flask --app webapp run` works too, but it uses Flask's own default port, 5000, which macOS AirPlay Receiver may already occupy; add `--port 5001`.)
 
-Options: `--host` (default `127.0.0.1`, this machine only), `--port` (default `5000`) and `--debug`
+Options: `--host` (default `127.0.0.1`, this machine only), `--port` (default `5001`) and `--debug`
 (Flask's debugger and auto-reloader, for development).
 
 ### Using it from your phone
@@ -311,12 +311,13 @@ To reach the app from another device on your network, listen on all interfaces:
 python webapp.py --host 0.0.0.0
 ```
 
-It prints a `Network:` address such as `http://192.168.0.216:5000`. Open that on your phone (same Wi-Fi), pick
+It prints a `Network:` address such as `http://192.168.0.216:5001`. Open that on your phone (same Wi-Fi), pick
 photos with the file picker, and download the tagged zip when it finishes. Things to know:
 
 - **There is no login.** While it is running, anyone on your network can upload images and spend your API credit. Use it on a network you trust, and stop it when you're done.
 - `--debug` is refused with a non-local `--host`, because the debugger lets anyone who can reach the server run code on your machine.
 - The first time, macOS may ask whether to allow incoming connections for Python. Allow it.
+- The default port is 5001 because macOS AirPlay Receiver listens on 5000 on all network addresses. If you pick 5000 with `--host 0.0.0.0` you will get "Address already in use" (or a 403 from `AirTunes` if you reach it anyway); either choose another port or turn off AirPlay Receiver in System Settings.
 - Guest Wi-Fi networks and some routers isolate devices from each other, which blocks this.
 
 ### Using the interface
