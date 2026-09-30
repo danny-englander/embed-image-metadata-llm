@@ -17,6 +17,16 @@ import yaml
 from PIL import Image
 
 from replacements import apply_replacements, replacement_prompt_notes
+from term import BOLD, DIM, RED, paint
+
+
+def _print_error(message: str) -> None:
+    print(paint(message, BOLD, RED))
+
+
+def _print_detail(message: str) -> None:
+    print(paint(message, DIM))
+
 
 # IPTC limit for AltTextAccessibility
 ALT_TEXT_MAX_LEN = 250
@@ -56,9 +66,13 @@ DESCRIPTION_INSTRUCTION_DEFAULT = (
 DESCRIPTION_INSTRUCTION_CREATIVE = (
     "a brief, highly creative short-story vignette inspired by the image. Use as much of {desc_len} "
     "characters as possible without exceeding {desc_len}. Invent a small narrative moment (mood, "
-    "incident, or inner life) rather than a literal catalog of what is visible, while remaining "
-    "recognizably about this image. Complete sentences. Do not wrap the whole story in quotation marks. "
-    "No Midjourney prompts, job IDs, or technical generation parameters."
+    "incident, or atmosphere) rather than a literal catalog of what is visible, while remaining "
+    "recognizably about this image. Vary how the story opens: often start with setting, light, "
+    "material, an object, or an action. Gendered pronouns (She, He, Her) are fine when they "
+    "clearly fit this particular image, but do not default to them and do not open every story "
+    "that way. If gender is unclear, prefer the figure, they, or a concrete noun. Complete "
+    "sentences. Do not wrap the whole story in quotation marks. No Midjourney prompts, job IDs, "
+    "or technical generation parameters."
 )
 
 IPTC_META_PROMPT = """You are helping tag a photograph for Adobe Bridge IPTC Core metadata.
@@ -123,7 +137,7 @@ def write_alt_text(image_path: Path, alt_text: str) -> bool:
     """Write AltTextAccessibility to image via exiftool. Truncates to 250 chars. Returns True on success."""
     exiftool = shutil.which("exiftool")
     if not exiftool:
-        print("❌ exiftool not found. Install with: brew install exiftool")
+        _print_error("❌ exiftool not found. Install with: brew install exiftool")
         return False
     # IPTC limit; replace newlines with space
     text = apply_replacements(alt_text.replace("\n", " ").strip())
@@ -145,11 +159,11 @@ def write_alt_text(image_path: Path, alt_text: str) -> bool:
             stdin=subprocess.DEVNULL,
         )
         if result.returncode != 0:
-            print(f"  ❌ exiftool error: {result.stderr or result.stdout}")
+            _print_error(f"  ❌ exiftool error: {result.stderr or result.stdout}")
             return False
         return True
     except subprocess.TimeoutExpired:
-        print("  ❌ exiftool timed out")
+        _print_error("  ❌ exiftool timed out")
         return False
 
 
@@ -199,7 +213,7 @@ def write_iptc_metadata(
     """Overwrite Title, ObjectName, Description, Caption-Abstract, Keywords, and Subject via exiftool."""
     exiftool = shutil.which("exiftool")
     if not exiftool:
-        print("❌ exiftool not found. Install with: brew install exiftool")
+        _print_error("❌ exiftool not found. Install with: brew install exiftool")
         return False
     title = truncate_title(title)
     description = truncate_description(description, description_max_len)
@@ -230,11 +244,11 @@ def write_iptc_metadata(
             stdin=subprocess.DEVNULL,
         )
         if result.returncode != 0:
-            print(f"  ❌ exiftool IPTC error: {result.stderr or result.stdout}")
+            _print_error(f"  ❌ exiftool IPTC error: {result.stderr or result.stdout}")
             return False
         return True
     except subprocess.TimeoutExpired:
-        print("  ❌ exiftool timed out writing IPTC")
+        _print_error("  ❌ exiftool timed out writing IPTC")
         return False
 
 
@@ -242,7 +256,7 @@ def write_title_only(image_path: Path, title: str) -> bool:
     """Overwrite only Title and ObjectName via exiftool. Leaves other IPTC fields alone."""
     exiftool = shutil.which("exiftool")
     if not exiftool:
-        print("❌ exiftool not found. Install with: brew install exiftool")
+        _print_error("❌ exiftool not found. Install with: brew install exiftool")
         return False
     title = truncate_title(title)
     if not title:
@@ -262,11 +276,11 @@ def write_title_only(image_path: Path, title: str) -> bool:
             stdin=subprocess.DEVNULL,
         )
         if result.returncode != 0:
-            print(f"  ❌ exiftool title error: {result.stderr or result.stdout}")
+            _print_error(f"  ❌ exiftool title error: {result.stderr or result.stdout}")
             return False
         return True
     except subprocess.TimeoutExpired:
-        print("  ❌ exiftool timed out writing title")
+        _print_error("  ❌ exiftool timed out writing title")
         return False
 
 
@@ -277,11 +291,11 @@ def resolve_llm_model_id(model_name: str) -> Optional[str]:
             models = yaml.safe_load(f)
         config = models.get(model_name)
         if not config:
-            print(f"  ❌ Unknown model in models.yaml: {model_name}")
+            _print_error(f"  ❌ Unknown model in models.yaml: {model_name}")
             return None
         return config.get("model")
     except (OSError, yaml.YAMLError) as e:
-        print(f"  ❌ Failed to load models.yaml: {e}")
+        _print_error(f"  ❌ Failed to load models.yaml: {e}")
         return None
 
 
@@ -354,17 +368,15 @@ def generate_iptc_metadata(
             cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, stdin=subprocess.DEVNULL
         )
         if result.returncode != 0:
-            print(
-                f"  ❌ llm IPTC error: exit {result.returncode}."
-            )
+            _print_error(f"  ❌ llm IPTC error: exit {result.returncode}.")
             if result.stderr:
-                print(f"  stderr: {result.stderr.strip()}")
+                _print_detail(f"  stderr: {result.stderr.strip()}")
             return None
         data = parse_iptc_json(result.stdout)
         if not data:
-            print("  ❌ Could not parse IPTC JSON from model output.")
+            _print_error("  ❌ Could not parse IPTC JSON from model output.")
             if result.stdout:
-                print(f"  stdout: {result.stdout.strip()[:200]}...")
+                _print_detail(f"  stdout: {result.stdout.strip()[:200]}...")
             return None
         title = (data.get("title") or "").strip()
         description = (data.get("description") or "").strip()
@@ -372,7 +384,7 @@ def generate_iptc_metadata(
         if isinstance(keywords, list):
             keywords = ", ".join(str(k).strip() for k in keywords if str(k).strip())
         if not title or not description or not keywords:
-            print("  ❌ IPTC JSON missing title, description, or keywords.")
+            _print_error("  ❌ IPTC JSON missing title, description, or keywords.")
             return None
         return (
             truncate_title(title),
@@ -380,7 +392,7 @@ def generate_iptc_metadata(
             truncate_keywords(keywords),
         )
     except subprocess.TimeoutExpired:
-        print("  ❌ llm timed out generating IPTC metadata.")
+        _print_error("  ❌ llm timed out generating IPTC metadata.")
         return None
 
 
@@ -421,23 +433,23 @@ def generate_title_only(
             cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, stdin=subprocess.DEVNULL
         )
         if result.returncode != 0:
-            print(f"  ❌ llm title error: exit {result.returncode}.")
+            _print_error(f"  ❌ llm title error: exit {result.returncode}.")
             if result.stderr:
-                print(f"  stderr: {result.stderr.strip()}")
+                _print_detail(f"  stderr: {result.stderr.strip()}")
             return None
         data = parse_iptc_json(result.stdout)
         if not data:
-            print("  ❌ Could not parse title JSON from model output.")
+            _print_error("  ❌ Could not parse title JSON from model output.")
             if result.stdout:
-                print(f"  stdout: {result.stdout.strip()[:200]}...")
+                _print_detail(f"  stdout: {result.stdout.strip()[:200]}...")
             return None
         title = (data.get("title") or "").strip()
         if not title:
-            print("  ❌ Title JSON missing title.")
+            _print_error("  ❌ Title JSON missing title.")
             return None
         return truncate_title(title)
     except subprocess.TimeoutExpired:
-        print("  ❌ llm timed out generating title.")
+        _print_error("  ❌ llm timed out generating title.")
         return None
 
 
@@ -455,13 +467,13 @@ def generate_alt_text(
             cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, env=env, stdin=subprocess.DEVNULL
         )
         if result.returncode != 0:
-            print(
+            _print_error(
                 f"  ❌ caption.py error: Command {result.args!r} returned exit status {result.returncode}."
             )
             if result.stderr:
-                print(f"  stderr: {result.stderr.strip()}")
+                _print_detail(f"  stderr: {result.stderr.strip()}")
             if result.stdout and not result.stderr:
-                print(f"  stdout: {result.stdout.strip()}")
+                _print_detail(f"  stdout: {result.stdout.strip()}")
             return None
         data = json.loads(result.stdout)
         captions = data.get("captions", {})
@@ -470,7 +482,7 @@ def generate_alt_text(
             alt = alt.get("caption") or alt.get("alt")
         return (alt or "").strip() or None
     except (json.JSONDecodeError, KeyError) as e:
-        print(f"  ❌ caption.py error: {e}")
+        _print_error(f"  ❌ caption.py error: {e}")
         return None
 
 

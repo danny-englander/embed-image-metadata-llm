@@ -34,6 +34,7 @@ from collections import defaultdict
 from tempfile import gettempdir
 
 from replacements import apply_replacements, replacement_prompt_notes
+from term import BOLD, CYAN, DIM, GREEN, MAGENTA, RED, YELLOW, paint
 
 
 def load_models():
@@ -48,7 +49,7 @@ def load_models():
         if not config_path.exists():
             config_path = Path.cwd() / "models.yaml"
         if not config_path.exists():
-            print("Error: models.yaml not found")
+            print(paint("Error: models.yaml not found", BOLD, RED))
             sys.exit(1)
         with open(config_path) as f:
             models = yaml.safe_load(f)
@@ -56,7 +57,7 @@ def load_models():
         # Get installed models from CLI
         result = subprocess.run(["llm", "models"], capture_output=True, text=True)
         if result.returncode != 0:
-            print(f"Error running 'llm models': {result.stderr}")
+            print(paint(f"Error running 'llm models': {result.stderr}", BOLD, RED))
             raise Exception("Failed to get model list")
 
         # Parse output to get installed models
@@ -80,13 +81,13 @@ def load_models():
         return models
 
     except FileNotFoundError:
-        print("Error: models.yaml not found (config_path checked: script dir and cwd)")
+        print(paint("Error: models.yaml not found (config_path checked: script dir and cwd)", BOLD, RED))
         sys.exit(1)
     except yaml.YAMLError as e:
-        print(f"Error parsing models.yaml: {e}")
+        print(paint(f"Error parsing models.yaml: {e}", BOLD, RED))
         sys.exit(1)
     except Exception as e:
-        print(f"Error checking model status: {e}")
+        print(paint(f"Error checking model status: {e}", BOLD, RED))
         return {
             name: dict(config, installed=False, configured=False)
             for name, config in models.items()
@@ -95,12 +96,7 @@ def load_models():
 
 def list_models(models):
     """Display models grouped by provider with installation and configuration status."""
-    # ANSI color codes
-    GREEN = "\033[32m"
-    RED = "\033[31m"
-    RESET = "\033[0m"
-
-    print("\nModel status:")
+    print(f"\n{paint('Model status:', BOLD, CYAN)}")
 
     by_provider = defaultdict(list)
     for name, config in models.items():
@@ -114,19 +110,22 @@ def list_models(models):
         # Simpler status check - just installed or not
         if config["installed"]:
             status = ""
-            symbol = f"{GREEN}✓{RESET}"
+            symbol = paint("✓", GREEN)
         else:
             status = "not installed"
-            symbol = f"{RED}✗{RESET}"
+            symbol = paint("✗", RED)
 
         by_provider[provider].append((name, config, status, symbol))
 
     for provider in sorted(by_provider):
-        print(f"\n{provider} Models:")
+        print(f"\n{paint(f'{provider} Models:', BOLD, YELLOW)}")
         for name, info, status, symbol in sorted(by_provider[provider]):
             desc_section = f"{info['description']} ({info['deployment']})"
-            status_section = f" - {status}" if status else ""
-            print(f"  {symbol} {name:15} - {desc_section:35}{status_section}")
+            status_section = paint(f" - {status}", DIM) if status else ""
+            print(
+                f"  {symbol} {paint(f'{name:15}', BOLD, CYAN)} - "
+                f"{paint(f'{desc_section:35}', DIM)}{status_section}"
+            )
 
 
 def model_is_ready(config):
@@ -169,10 +168,10 @@ def verify_image_path(image_path: str) -> bool:
     """Verify that the image path exists and is accessible."""
     path = Path(image_path)
     if not path.exists():
-        print(f"Error: image {image_path} not found")
+        print(paint(f"Error: image {image_path} not found", BOLD, RED))
         return False
     if not path.is_file():
-        print(f"Error: {image_path} is not a file")
+        print(paint(f"Error: {image_path} is not a file", BOLD, RED))
         return False
     return True
 
@@ -205,7 +204,7 @@ def process_image(
     start_time = time.time()
 
     if args.debug:
-        print(f"\nRunning caption generation for {len(models_to_run)} models...")
+        print(paint(f"\nRunning caption generation for {len(models_to_run)} models...", BOLD, CYAN))
 
     results = {"image": image_path, "captions": {}}
 
@@ -226,8 +225,8 @@ def process_image(
 
     if args.debug:
         total_time = round(time.time() - start_time, 1)
-        print("\n" + "=" * 80)
-        print(f"Total execution time: {total_time}s\n")
+        print("\n" + paint("=" * 80, DIM))
+        print(f"{paint('Total execution time:', DIM)} {paint(f'{total_time}s', BOLD, GREEN)}\n")
 
     return results
 
@@ -270,10 +269,10 @@ def run_llm_command(
                 cmd.extend(["-o", key, str(value)])
 
         if debug:
-            print("\n" + "=" * 80)
-            print(f"Model: {model_config['model']}")
-            print(f"Image: {image_path}")
-            print("-" * 80)
+            print("\n" + paint("=" * 80, DIM))
+            print(f"{paint('Model:', DIM)} {paint(model_config['model'], BOLD, CYAN)}")
+            print(f"{paint('Image:', DIM)} {paint(image_path, CYAN)}")
+            print(paint("-" * 80, DIM))
 
             # Build and show the exact command with settings
             settings_str = ""
@@ -281,19 +280,20 @@ def run_llm_command(
                 settings_str = " " + " ".join(
                     f"-o {k} {v}" for k, v in model_config["settings"].items()
                 )
-            print(f"Command:")
-            print(f"  llm -m {model_config['model']} -a {image_path}{settings_str}")
-            print("-" * 80)
+            print(paint("Command:", YELLOW))
+            command = f"llm -m {model_config['model']} -a {image_path}{settings_str}"
+            print(f"  {paint(command, DIM)}")
+            print(paint("-" * 80, DIM))
 
-            print("Prompt details:")
+            print(paint("Prompt details:", YELLOW))
             if context:
-                print("  Context provided:")
-                print(f"    {context}")
+                print(f"  {paint('Context provided:', DIM)}")
+                print(f"    {paint(context, MAGENTA)}")
             if "settings" in model_config:
-                print("  Settings:")
+                print(f"  {paint('Settings:', DIM)}")
                 for key, value in model_config["settings"].items():
-                    print(f"    {key}: {value}")
-            print("-" * 80)
+                    print(f"    {paint(key, CYAN)}: {value}")
+            print(paint("-" * 80, DIM))
 
         result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -308,21 +308,21 @@ def run_llm_command(
         caption = clean_caption(raw_caption)
 
         if debug:
-            print(f"Generated caption ({execution_time}s):")
-            print(f"  Raw: {raw_caption}")
-            print(f"  Clean: {caption}")
-            print("=" * 80)
+            print(f"{paint('Generated caption', GREEN)} {paint(f'({execution_time}s)', DIM)}:")
+            print(f"  {paint('Raw:', DIM)} {raw_caption}")
+            print(f"  {paint('Clean:', BOLD, GREEN)} {paint(caption, GREEN)}")
+            print(paint("=" * 80, DIM))
 
         return {"caption": caption, "time": execution_time}
 
     except subprocess.CalledProcessError as e:
         if debug:
-            print(e.stderr, file=sys.stderr)
+            print(paint(e.stderr, BOLD, RED), file=sys.stderr)
         return {"caption": e.stderr.strip()}
     except Exception as e:
         error_msg = str(e)
         if debug:
-            print(error_msg, file=sys.stderr)
+            print(paint(error_msg, BOLD, RED), file=sys.stderr)
         return {"caption": error_msg}
 
 

@@ -61,6 +61,9 @@ class TestDescriptionInstruction(unittest.TestCase):
         self.assertIn("short-story", text)
         self.assertIn(str(DESCRIPTION_STORY_MAX_LEN), text)
         self.assertNotIn("{desc_len}", text)
+        self.assertIn("do not default to them", text)
+        self.assertIn("do not open every story", text)
+        self.assertIn("If gender is unclear", text)
 
     def test_iptc_prompt_embeds_creative_description(self):
         prompt = IPTC_META_PROMPT.format(

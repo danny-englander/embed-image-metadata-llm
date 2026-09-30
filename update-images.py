@@ -13,6 +13,29 @@ from pathlib import Path
 from typing import Optional
 
 from image_processor import DEFAULT_MODEL, DELAY_BETWEEN_REQUESTS, EXTENSIONS, process_single_image
+from term import (
+    BLUE,
+    BOLD,
+    BRIGHT_CYAN,
+    BRIGHT_GREEN,
+    BRIGHT_YELLOW,
+    CYAN,
+    DIM,
+    GREEN,
+    MAGENTA,
+    RED,
+    YELLOW,
+    paint,
+)
+
+
+def _print_labeled_field(label: str, color: str, value: str, char_count: Optional[int] = None) -> None:
+    """Print a metadata field with a colored label and dim character count."""
+    count = len(value) if char_count is None else char_count
+    print(
+        f"  {paint(label, color)} {paint(f'({count} chars)', DIM)}: "
+        f"{paint(value, BOLD)}"
+    )
 
 
 def process_directory(
@@ -27,7 +50,7 @@ def process_directory(
 ) -> None:
     """Process all images in directory: generate alt text and write to XMP AltTextAccessibility."""
     if not directory.is_dir():
-        print(f"❌ Not a directory: {directory}")
+        print(paint(f"❌ Not a directory: {directory}", BOLD, RED))
         sys.exit(1)
 
     image_paths = sorted(
@@ -35,26 +58,44 @@ def process_directory(
     )
     total = len(image_paths)
     if total == 0:
-        print(f"No images found in {directory}")
+        print(paint(f"No images found in {directory}", YELLOW))
         return
 
-    print(f"Found {total} images in {directory}")
-    print(f"Model: {model}")
+    print(
+        f"{paint('Found', DIM)} {paint(str(total), BOLD, BRIGHT_CYAN)} "
+        f"{paint('images in', DIM)} {paint(str(directory), CYAN)}"
+    )
+    print(f"{paint('Model:', DIM)} {paint(model, BRIGHT_CYAN)}")
     if context:
-        print(f"Context: {context}")
+        print(f"{paint('Context:', DIM)} {paint(context, BRIGHT_YELLOW)}")
     if title_only:
-        print("Title only: will overwrite Title/ObjectName; leave alt, description, keywords alone")
+        print(
+            paint(
+                "Title only: will overwrite Title/ObjectName; leave alt, description, keywords alone",
+                YELLOW,
+            )
+        )
     elif iptc:
-        print("IPTC: will overwrite Title, Description, and Keywords")
+        print(paint("IPTC: will overwrite Title, Description, and Keywords", YELLOW))
     if (title_only or iptc) and creative_title:
-        print("Title style: creative (evocative) instead of descriptive marketplace-style")
+        print(
+            f"{paint('Title style:', DIM)} "
+            f"{paint('creative (evocative) instead of descriptive marketplace-style', MAGENTA)}"
+        )
     if iptc and creative_description:
-        print("Description style: creative short story (max 375 characters)")
+        print(
+            f"{paint('Description style:', DIM)} "
+            f"{paint('creative short story (max 375 characters)', BLUE)}"
+        )
     print()
 
     for idx, image_path in enumerate(image_paths, 1):
         time.sleep(DELAY_BETWEEN_REQUESTS)
-        print(f"[{idx}/{total}] {image_path.name}")
+        print(
+            f"{paint('[', DIM)}{paint(str(idx), BOLD, BRIGHT_CYAN)}"
+            f"{paint('/', DIM)}{paint(str(total), DIM)}{paint(']', DIM)} "
+            f"{paint(image_path.name, BOLD)}"
+        )
 
         result = process_single_image(
             image_path,
@@ -68,24 +109,24 @@ def process_directory(
         )
 
         if result["status"] == "skipped":
-            print(f"  💠 Skipped ({result['message']})")
+            print(paint(f"  💠 Skipped ({result['message']})", YELLOW))
             continue
 
         if result["status"] == "error":
-            print(f"  ❌ {result['message']}")
+            print(paint(f"  ❌ {result['message']}", BOLD, RED))
             continue
 
         if title_only:
-            print(f"  📌 Title ({len(result['title'])} chars): {result['title']}")
-            print("  ✓ Written IPTC Title only")
+            _print_labeled_field("📌 Title", MAGENTA, result["title"])
+            print(paint("  ✓ Written IPTC Title only", BRIGHT_GREEN))
             continue
 
-        print(f"  🟢 📸 🟢  {result['alt']}")
-        print("  ✓ Written to XMP AltTextAccessibility")
+        print(f"  {paint('🟢 📸 🟢', GREEN)}  {paint(result['alt'], BRIGHT_CYAN)}")
+        print(paint("  ✓ Written to XMP AltTextAccessibility", BRIGHT_GREEN))
 
         if iptc:
             if not result["title"]:
-                print(f"  ❌ {result['message']}")
+                print(paint(f"  ❌ {result['message']}", BOLD, RED))
                 continue
             preview_desc = (
                 result["description"][:120] + "..."
@@ -97,12 +138,12 @@ def process_directory(
                 if len(result["keywords"]) > 120
                 else result["keywords"]
             )
-            print(f"  📌 Title ({len(result['title'])} chars): {result['title']}")
-            print(f"  📝 Description ({len(result['description'])} chars): {preview_desc}")
-            print(f"  🏷️  Keywords ({len(result['keywords'])} chars): {preview_kw}")
-            print("  ✓ Written IPTC Title, Description, and Keywords")
+            _print_labeled_field("📌 Title", MAGENTA, result["title"])
+            _print_labeled_field("📝 Description", BLUE, preview_desc, len(result["description"]))
+            _print_labeled_field("🏷️  Keywords", BRIGHT_YELLOW, preview_kw, len(result["keywords"]))
+            print(paint("  ✓ Written IPTC Title, Description, and Keywords", BRIGHT_GREEN))
 
-    print("\nDone.")
+    print(f"\n{paint('Done.', BOLD, BRIGHT_GREEN)}")
 
 
 def main() -> None:

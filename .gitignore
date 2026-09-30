@@ -172,3 +172,5 @@ cython_debug/
 key.txt
 *.code-workspace
 .DS_Store
+
+scratch.txt
