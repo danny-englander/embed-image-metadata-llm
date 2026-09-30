@@ -100,11 +100,6 @@ def list_models(models):
 
     by_provider = defaultdict(list)
     for name, config in models.items():
-        # Better provider detection
-        if "provider" not in config:
-            if "llava" in name.lower():
-                config["provider"] = "ollama"
-
         provider = config.get("provider", "other").upper()
 
         # Simpler status check - just installed or not

@@ -16,7 +16,7 @@ Inspired by [Dries Buytaert's "Image Caption"](https://github.com/dbuytaert/imag
   - `exiftool` (for writing XMP Alt Text into images)
 - **LLM CLI tooling**:
   - [`llm`](https://llm.datasette.io/) (CLI wrapper)
-  - At least one model/plugin configured (e.g. `llm-anthropic`, or local models via Ollama)
+  - The `llm-anthropic` plugin (installed via `requirements.txt`) and an Anthropic API key
 
 ### Install system dependencies (macOS)
 
@@ -29,11 +29,9 @@ If you don’t have Homebrew installed, you can install it by following the inst
 
 The `llm` CLI is installed later via `pip install -r requirements.txt`, so you don’t need to install it separately.
 
-### Configure an LLM provider
+### Configure Anthropic
 
-You have two main options: a **cloud model** (Anthropic/OpenAI/etc.) or a **local model** (via Ollama).
-
-#### Option A: Anthropic (cloud, recommended default)
+This project uses Anthropic models (`claude-sonnet-5-5` and `claude-sonnet-4-6`).
 
 1. **Install the plugin**:
 
@@ -49,35 +47,6 @@ You have two main options: a **cloud model** (Anthropic/OpenAI/etc.) or a **loca
    ```
 
 The default model used by `update-images.py` is `claude-sonnet-5-5`, which is preconfigured in `models.yaml`.
-
-#### Option B: Local models via Ollama
-
-1. **Install Ollama** and pull at least one vision-capable model, e.g.:
-
-   ```bash
-   # See https://ollama.com/ for installation instructions
-   ollama pull llama3.2-vision:11b-instruct-q8_0
-   ```
-
-2. **Install the Ollama plugin for `llm`** (if required by your setup):
-
-   ```bash
-   llm install llm-ollama  # plugin name may vary; see Ollama + llm docs
-   ```
-
-3. Use one of the local model IDs configured in `models.yaml`, such as:
-
-   - `llama-vision`
-   - `llava-13b`
-   - `llava-34b`
-   - `llava-llama3`
-   - `minicpm-v`
-   - `qwen2.5vl-7b`
-   - `qwen2.5vl-32b`
-   - `gemma3-12b`
-   - `gemma3-27b`
-   - `mistral-3.1-24b`
-   - `llama4-16x17b`
 
 ---
 
@@ -114,7 +83,6 @@ pip install -r requirements.txt
 
 - `llm`
 - `pillow`
-- `ollama`
 - `pyyaml`
 - `requests`
 - `python-dotenv`
@@ -125,7 +93,7 @@ pip install -r requirements.txt
 
 The file `models.yaml` (already in the repo) defines the available models and prompts for image captioning.
 
-- It includes cloud models (e.g. `claude-sonnet-5-5`, `gpt-5`, `gpt-5.2`, `pixtral-*`) and local/Ollama models.
+- It defines two models: `claude-sonnet-5-5` (default) and `claude-sonnet-4-6`.
 - `update-images.py` will automatically set the `IMAGE_CAPTION_CONFIG` environment variable to point to this file, so you normally do **not** need to configure it manually.
 
 If you create your own config file elsewhere, you can override the default by setting:
@@ -298,7 +266,7 @@ All tests should pass.
   llm models
   ```
 
-  Confirm that the model you are using (e.g. `claude-sonnet-5-5` or `llama-vision`) is listed and working.
+  Confirm that the model you are using (e.g. `claude-sonnet-5-5`) is listed and working.
 
 - **LLM API key issues**
   Re-run:
@@ -340,7 +308,7 @@ Notes:
 
 ## 10. Summary
 
-1. Install `exiftool`, `llm`, and configure at least one model (Anthropic or local).
+1. Install `exiftool`, `llm`, and configure your Anthropic API key.
 2. Create and activate a Python virtualenv.
 3. `pip install -r requirements.txt`.
 4. Run:

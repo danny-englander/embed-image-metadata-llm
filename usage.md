@@ -87,7 +87,7 @@ python update-images.py my-album-folder --context "Trip to Japan" --force
 **Options**
 
 - `directory` – subdirectory under `BASE_DIR` to process.
-- `--model` – model for caption.py and for title formatting (default: `gpt-5.2`).
+- `--model` – model for caption.py and for title formatting (default: `claude-sonnet-5-5`).
 - `--context` – extra notes included when generating alt text.
 - `--force` – process images even if they are marked verified.
 
