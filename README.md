@@ -122,9 +122,9 @@ These rules are always applied in every generated field (alt text, title, descri
 The primary script in this repo is `update-images.py`, which:
 
 - Scans a folder of images.
-- Uses `caption.py` + `llm` to generate alt text.
-- Writes the caption into the image’s **XMP Alt Text (Accessibility)** field via `exiftool`.
-- Optionally (`--iptc`) generates Title, Description, and Keywords and overwrites Adobe Bridge **IPTC Core** fields (`Title` / `ObjectName`, `Description` / `Caption-Abstract`, `Keywords` / `Subject`). Title and description each have a default marketplace style and an optional creative style (`--creative-title`, `--creative-description`).
+- Uses an LLM (via `llm`) to generate the fields you select: **alt text**, **IPTC Title**, **IPTC Description**, and **IPTC Keywords**. Each field is chosen independently.
+- Writes them into the image with `exiftool`: alt text to **XMP Alt Text (Accessibility)**, and the IPTC fields to Adobe Bridge **IPTC Core** (`Title` / `ObjectName`, `Description` / `Caption-Abstract`, `Keywords` / `Subject`).
+- Skips any selected field that already has a value, unless you pass that field's `--overwrite-*` flag. Title and description each have a default marketplace style and an optional creative style (`--creative-title`, `--creative-description`).
 
 ### Supported image formats
 
@@ -138,57 +138,64 @@ From the project root:
 # Activate your virtualenv if not already active
 source .venv/bin/activate
 
-# Basic run (uses default model from models.yaml: claude-sonnet-5-5)
-python update-images.py /path/to/image/folder
+# Generate alt text (uses default model from models.yaml: claude-sonnet-5-5)
+python update-images.py /path/to/image/folder --alt
 ```
+
+You must select at least one field (see [Choosing fields](#choosing-fields)).
 
 You can provide optional context to improve captions:
 
 ```bash
-python update-images.py /path/to/image/folder \
+python update-images.py /path/to/image/folder --alt \
   --context "Cherry blossoms at Japanese Friendship Garden"
 ```
 
 Or using the positional context argument:
 
 ```bash
-python update-images.py /path/to/image/folder \
+python update-images.py /path/to/image/folder --alt \
   "Cherry blossoms at Japanese Friendship Garden"
 ```
 
 To choose a specific model defined in `models.yaml`:
 
 ```bash
-python update-images.py /path/to/image/folder \
+python update-images.py /path/to/image/folder --alt \
   --model claude-sonnet-5-5
 ```
 
-To overwrite existing alt text in images:
+### Choosing fields
+
+Select any combination of fields. Each has its own flag, and each has a companion overwrite flag:
+
+| Field | Flag | Overwrite flag | Written to |
+|---|---|---|---|
+| Alt text | `--alt` | `--overwrite-alt` | XMP `AltTextAccessibility` (max 250 characters) |
+| Title | `--title` | `--overwrite-title` | `Title` and `ObjectName` (max 59 characters, under the IPTC 64-char limit) |
+| Description | `--description` | `--overwrite-description` | `Description` and `Caption-Abstract` (3–4 sentences, or a short story with `--creative-description`) |
+| Keywords | `--keywords` | `--overwrite-keywords` | `Keywords` and XMP `Subject` (~500 characters, replaced rather than appended) |
+
+You must select at least one field. Fields you don't select are never touched.
+
+A selected field that **already has a value is skipped** unless its overwrite flag is given; the other selected fields still run. An overwrite flag only applies to its own field and requires that field's flag (for example `--overwrite-title` requires `--title`).
 
 ```bash
-python update-images.py /path/to/image/folder --force
+# Alt text only
+python update-images.py /path/to/image/folder --alt
+
+# Everything, filling only what is missing
+python update-images.py /path/to/image/folder --alt --title --description --keywords
+
+# Regenerate just the keywords, leaving everything else alone
+python update-images.py /path/to/image/folder --keywords --overwrite-keywords
+
+# Replace alt text and title, but only fill in description and keywords where empty
+python update-images.py /path/to/image/folder --alt --title --description --keywords \
+  --overwrite-alt --overwrite-title
 ```
 
-### IPTC Title, Description, and Keywords (`--iptc`)
-
-By default the script only writes alt text. Pass `--iptc` to also generate and **overwrite** the IPTC fields Adobe Bridge shows under IPTC Core:
-
-- **Title** (and IPTC `ObjectName`) — up to 59 characters (under the IPTC 64-char ObjectName limit)
-- **Description** (and IPTC `Caption-Abstract`) — 3–4 sentences by default, or a short story with `--creative-description`
-- **Keywords** (and XMP `Subject`) — comma-separated tags aiming for ~500 characters; existing keywords are replaced, not appended
-
-```bash
-python update-images.py /path/to/image/folder --iptc
-python update-images.py /path/to/image/folder --iptc --force --context "Linoleum-cut style graphics"
-```
-
-Skip/`--force` still apply only to alt text: images that already have alt text are skipped unless you pass `--force`. When an image is processed with `--iptc`, Title, Description, and Keywords are always overwritten.
-
-To add **only** a Title (leave existing alt, description, and keywords unchanged):
-
-```bash
-python update-images.py /path/to/image/folder --title-only
-```
+Title, description, and keywords are generated together in one model call (only for the ones that need it), so selecting more of them does not cost extra calls. They use the alt text as context: the one just generated, or the existing one if you didn't select `--alt`.
 
 ### Creative titles (`--creative-title`)
 
@@ -200,24 +207,23 @@ Pass `--creative-title` for a more evocative, artistic title instead, for exampl
 
 > Wanderer Beneath a Burning Sky
 
-`--creative-title` requires `--iptc` or `--title-only`.
+`--creative-title` requires `--title`.
 
 ```bash
-python update-images.py /path/to/image/folder --iptc --creative-title
-python update-images.py /path/to/image/folder --title-only --creative-title
+python update-images.py /path/to/image/folder --title --creative-title
 ```
 
 ### Creative descriptions (`--creative-description`)
 
-The default description is 3–4 literal sentences expanded from the alt text.
+The default description is 3–4 literal sentences describing the image (building on the alt text when there is one).
 
 Pass `--creative-description` to write the Description as a short-story vignette (mood, incident, or inner life) instead of a catalog of what is visible. Stories are capped at **375 characters**; if the model runs long, the text is trimmed at a sentence boundary when possible.
 
-`--creative-description` requires `--iptc` (title-only does not write a description). It can be combined with `--creative-title`:
+`--creative-description` requires `--description`. It can be combined with `--creative-title`:
 
 ```bash
-python update-images.py /path/to/image/folder --iptc --creative-description
-python update-images.py /path/to/image/folder --iptc --creative-title --creative-description
+python update-images.py /path/to/image/folder --description --creative-description
+python update-images.py /path/to/image/folder --title --description --creative-title --creative-description
 ```
 
 ---
@@ -230,18 +236,18 @@ python update-images.py /path/to/image/folder --iptc --creative-title --creative
 2. Run:
 
    ```bash
-   python update-images.py test-images
+   python update-images.py test-images --alt
    ```
 
 3. Check output:
-   - You should see logs like `🟢 <caption…>` and `✓ Written to XMP AltTextAccessibility`.
+   - You should see logs like `🟢 <caption…>` and `✓ Written: alt text`.
 
 ### 7.2. Run unit tests
 
-There are unit tests for caption cleaning, word replacements, and title/description style prompts:
+There are unit tests for caption cleaning, word replacements, prompt building, per-field selection and overwrite logic, and CLI flag validation:
 
 ```bash
-python -m unittest test_caption.py test_replacements.py test_image_processor.py
+python -m unittest test_caption.py test_replacements.py test_image_processor.py test_update_images.py
 ```
 
 All tests should pass.
@@ -288,13 +294,20 @@ source .venv/bin/activate
 flask --app webapp run
 ```
 
-Then open http://127.0.0.1:5000. Upload one or more images, pick a model, optional context,
-mode, and whether to overwrite existing alt text — the same controls as `update-images.py`'s
-flags:
+Then open http://127.0.0.1:5000. Upload one or more images, pick a model, add optional context,
+and tick the fields to generate. They are the same controls as `update-images.py`'s flags:
 
-- **Alt text only**
-- **Alt text + IPTC** — shows **Creative titles** and **Creative descriptions** checkboxes
-- **Title only** — shows **Creative titles** (descriptions are not written in this mode)
+- **Alt text**, **IPTC Title**, **IPTC Description**, **IPTC Keywords** — each is its own checkbox
+  (nothing is selected by default; at least one is required).
+- Each field has an **Overwrite existing** checkbox beside it, enabled once the field is ticked. A ticked
+  field that already has a value is skipped unless its Overwrite box is checked.
+- **Creative titles** appears under Title and **Creative descriptions** under Description when those are ticked.
+
+Thumbnails of the images you choose appear immediately, before anything is uploaded. After you click
+**Upload & Process**, each image becomes an expandable row as its result arrives, with a table of what
+was written, skipped, or failed for every field. When the batch finishes, **Run again** reprocesses the
+same images using whatever options are currently ticked, so you can change a checkbox and compare
+results without re-selecting files. Each run starts from your original images, not the previously tagged copies.
 
 Progress and results are shown live; when done, download a zip of the tagged images
 (metadata embedded exactly as the CLI would write it, since the web app calls the same
@@ -312,8 +325,8 @@ Notes:
 4. Run:
 
    ```bash
-   python update-images.py /path/to/images [--context ...] [--model ...] [--force] [--iptc] [--title-only] [--creative-title] [--creative-description]
+   python update-images.py /path/to/images --alt --title --description --keywords [--overwrite-alt] [--overwrite-title] [--overwrite-description] [--overwrite-keywords] [--context ...] [--model ...] [--creative-title] [--creative-description]
    ```
 
-   to generate and embed alt text in your images (and optionally IPTC Title/Description/Keywords, including creative title and short-story description styles).
+   to generate and embed the fields you select (use any combination of the four field flags; at least one is required), with optional creative title and short-story description styles.
 

@@ -23,10 +23,11 @@ This document describes what each script does, how they differ, and whether they
 **What it does**
 
 - Scans a **directory you specify** for images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.heic`, `.webp`).
-- For each image (unless it already has alt text and you don’t use `--force`):
-  - Calls **caption.py** (Anthropic/LLM via `llm` + `llm-anthropic`) to generate alt text.
-  - Writes the result into the image file’s **XMP Alt Text (Accessibility)** field using **exiftool** (IPTC limit 250 chars).
-  - With **`--iptc`**: runs a second LLM call for a Title (up to 59 chars), Description (3–4 sentences, or a ≤375-character short story with `--creative-description`), and ~500-character Keywords, then overwrites IPTC Core `Title`/`ObjectName`, `Description`/`Caption-Abstract`, and `Keywords`/`Subject` (full replace, not append).
+- You choose which fields to generate, independently: **`--alt`**, **`--title`**, **`--description`**, **`--keywords`** (at least one is required).
+- For each selected field that is empty (or whose `--overwrite-*` flag is given):
+  - **Alt text** – calls **caption.py** (Anthropic/LLM via `llm` + `llm-anthropic`) and writes the **XMP Alt Text (Accessibility)** field using **exiftool** (limit 250 chars).
+  - **Title / Description / Keywords** – one LLM call for whichever of the three are needed: a Title (up to 59 chars), Description (3–4 sentences, or a ≤375-character short story with `--creative-description`), and ~500-character Keywords. Written to IPTC Core `Title`/`ObjectName`, `Description`/`Caption-Abstract`, and `Keywords`/`Subject` (full replace, not append).
+- A selected field that already has a value is skipped unless its overwrite flag is given; other selected fields still run.
 - No remote API and no `AUTH_TOKEN`. Requires:
   - `exiftool` (e.g. `brew install exiftool`)
   - `llm` + `llm-anthropic`, API key via `llm keys set anthropic`
@@ -35,14 +36,15 @@ This document describes what each script does, how they differ, and whether they
 **Typical use**
 
 - Add or refresh accessibility alt text **in the image files themselves** (e.g. for a local photo gallery or static site generator that reads XMP).
-- Optionally refresh Adobe Bridge IPTC Title, Description, and Keywords with `--iptc`.
+- Generate or refresh Adobe Bridge IPTC Title, Description, and Keywords with `--title`, `--description`, and `--keywords`.
 
 **Example**
 
 ```bash
-python update-images.py /path/to/image/folder
-python update-images.py /path/to/folder --context "Cherry blossoms at Japanese Friendship Garden" --force
-python update-images.py /path/to/folder --iptc --force
+python update-images.py /path/to/image/folder --alt
+python update-images.py /path/to/folder --alt --overwrite-alt --context "Cherry blossoms at Japanese Friendship Garden"
+python update-images.py /path/to/folder --alt --title --description --keywords
+python update-images.py /path/to/folder --keywords --overwrite-keywords
 ```
 
 **Options**
@@ -50,11 +52,10 @@ python update-images.py /path/to/folder --iptc --force
 - `directory` – folder containing images.
 - Optional positional or `-c` / `--context` – short description to improve captions.
 - `--model` – model passed to caption.py (default: `claude-sonnet-5-5`).
-- `--force` – overwrite existing AltTextAccessibility.
-- `--iptc` – also generate and overwrite IPTC Title, Description, and Keywords.
-- `--title-only` – only generate and overwrite Title/ObjectName; leave alt, description, and keywords alone.
-- `--creative-title` – with `--iptc` or `--title-only`, generate evocative titles instead of descriptive marketplace-style ones.
-- `--creative-description` – with `--iptc`, write the Description as a creative short story of at most 375 characters.
+- `--alt`, `--title`, `--description`, `--keywords` – the fields to generate (select at least one).
+- `--overwrite-alt`, `--overwrite-title`, `--overwrite-description`, `--overwrite-keywords` – replace an existing value for that field (requires the matching field flag). Without it, a field that is already set is skipped.
+- `--creative-title` – with `--title`, generate evocative titles instead of descriptive marketplace-style ones.
+- `--creative-description` – with `--description`, write the Description as a creative short story of at most 375 characters.
 ---
 
 ## update-images.py
