@@ -49,7 +49,7 @@ python update-images.py /path/to/folder --iptc --force
 
 - `directory` – folder containing images.
 - Optional positional or `-c` / `--context` – short description to improve captions.
-- `--model` – model passed to caption.py (default: `claude-sonnet-4-5`).
+- `--model` – model passed to caption.py (default: `claude-sonnet-5-5`).
 - `--force` – overwrite existing AltTextAccessibility.
 - `--iptc` – also generate and overwrite IPTC Title, Description, and Keywords.
 - `--title-only` – only generate and overwrite Title/ObjectName; leave alt, description, and keywords alone.

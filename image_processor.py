@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from tempfile import gettempdir
 from typing import Optional
@@ -25,7 +26,7 @@ TITLE_MAX_LEN = 59
 # Creative short-story descriptions stay well under typical IPTC Caption-Abstract limits.
 DESCRIPTION_STORY_MAX_LEN = 375
 
-DEFAULT_MODEL = "claude-sonnet-4-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"
 DELAY_BETWEEN_REQUESTS = 2  # seconds
 SCRIPT_DIR = Path(__file__).resolve().parent
 CAPTION_SCRIPT = SCRIPT_DIR / "caption.py"
@@ -270,7 +271,7 @@ def write_title_only(image_path: Path, title: str) -> bool:
 
 
 def resolve_llm_model_id(model_name: str) -> Optional[str]:
-    """Map models.yaml key (e.g. claude-sonnet-4-5) to llm -m id."""
+    """Map models.yaml key (e.g. claude-sonnet-5-5) to llm -m id."""
     try:
         with open(MODELS_CONFIG) as f:
             models = yaml.safe_load(f)
@@ -444,7 +445,7 @@ def generate_alt_text(
     image_path: Path, model: str, context: Optional[str]
 ) -> Optional[str]:
     """Run caption.py for one image and return the caption for the given model, or None on failure."""
-    cmd = [str(CAPTION_SCRIPT), str(image_path), "--model", model]
+    cmd = [sys.executable, str(CAPTION_SCRIPT), str(image_path), "--model", model]
     if context:
         cmd.extend(["--context", context])
     env = dict(os.environ)

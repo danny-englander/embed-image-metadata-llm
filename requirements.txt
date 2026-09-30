@@ -5,3 +5,4 @@ pyyaml
 requests
 python-dotenv
 flask
+llm-anthropic>=0.30

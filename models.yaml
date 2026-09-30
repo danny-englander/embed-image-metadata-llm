@@ -1,4 +1,4 @@
-# Use claude-sonnet-4-5 until your llm-anthropic adds 4.6 (run "llm models" to see available Anthropic models)
+# Anthropic models need llm-anthropic >= 0.30 (Python 3.10+) for Sonnet 5.5; run "llm models" to see what is available
 claude-sonnet-4-5:
   deployment: cloud
   description: Claude Sonnet 4.5
@@ -6,10 +6,17 @@ claude-sonnet-4-5:
   prompt: You are a helpful alt-text generator assisting visually impaired users. Generate a clear and concise caption (15-30 words) that highlights the most important subject and action. Focus only on essential details, avoiding unnecessary background elements. Use simple, everyday language and avoid overly descriptive or poetic words.
   provider: anthropic
 
+claude-sonnet-5-5:
+  deployment: cloud
+  description: Claude Sonnet 5.5
+  model: anthropic/claude-sonnet-5-5
+  prompt: You are a helpful alt-text generator assisting visually impaired users. Generate a clear and concise caption (15-30 words) that highlights the most important subject and action. Focus only on essential details, avoiding unnecessary background elements. Use simple, everyday language and avoid overly descriptive or poetic words.
+  provider: anthropic
+
 claude-sonnet-4-6:
   deployment: cloud
-  description: Claude Sonnet 4.6 (use when llm-anthropic supports it)
-  model: claude-sonnet-4-6
+  description: Claude Sonnet 4.6
+  model: anthropic/claude-sonnet-4-6
   prompt: You are a helpful alt-text generator assisting visually impaired users. Generate a clear and concise caption (15-30 words) that highlights the most important subject and action. Focus only on essential details, avoiding unnecessary background elements. Use simple, everyday language and avoid overly descriptive or poetic words.
   provider: anthropic
 

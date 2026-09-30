@@ -48,7 +48,7 @@ You have two main options: a **cloud model** (Anthropic/OpenAI/etc.) or a **loca
    # Paste your Anthropic API key when prompted
    ```
 
-The default model used by `update-images.py` is `claude-sonnet-4-5`, which is preconfigured in `models.yaml`.
+The default model used by `update-images.py` is `claude-sonnet-5-5`, which is preconfigured in `models.yaml`.
 
 #### Option B: Local models via Ollama
 
@@ -125,7 +125,7 @@ pip install -r requirements.txt
 
 The file `models.yaml` (already in the repo) defines the available models and prompts for image captioning.
 
-- It includes cloud models (e.g. `claude-sonnet-4-5`, `gpt-5`, `gpt-5.2`, `pixtral-*`) and local/Ollama models.
+- It includes cloud models (e.g. `claude-sonnet-5-5`, `gpt-5`, `gpt-5.2`, `pixtral-*`) and local/Ollama models.
 - `update-images.py` will automatically set the `IMAGE_CAPTION_CONFIG` environment variable to point to this file, so you normally do **not** need to configure it manually.
 
 If you create your own config file elsewhere, you can override the default by setting:
@@ -172,7 +172,7 @@ From the project root:
 # Activate your virtualenv if not already active
 source .venv/bin/activate
 
-# Basic run (uses default model from models.yaml: claude-sonnet-4-5)
+# Basic run (uses default model from models.yaml: claude-sonnet-5-5)
 python update-images.py /path/to/image/folder
 ```
 
@@ -194,7 +194,7 @@ To choose a specific model defined in `models.yaml`:
 
 ```bash
 python update-images.py /path/to/image/folder \
-  --model claude-sonnet-4-5
+  --model claude-sonnet-5-5
 ```
 
 To overwrite existing alt text in images:
@@ -298,7 +298,7 @@ All tests should pass.
   llm models
   ```
 
-  Confirm that the model you are using (e.g. `claude-sonnet-4-5` or `llama-vision`) is listed and working.
+  Confirm that the model you are using (e.g. `claude-sonnet-5-5` or `llama-vision`) is listed and working.
 
 - **LLM API key issues**
   Re-run:
