@@ -17,7 +17,7 @@ def parse_error(*argv) -> str:
 class TestParseArgs(unittest.TestCase):
     def test_defaults_are_local_only_and_not_debug(self):
         args = webapp.parse_args([])
-        self.assertEqual((args.host, args.port, args.debug), ("127.0.0.1", 5000, False))
+        self.assertEqual((args.host, args.port, args.debug), ("127.0.0.1", 5001, False))
 
     def test_host_and_port_can_be_set(self):
         args = webapp.parse_args(["--host", "0.0.0.0", "--port", "8080"])

@@ -229,7 +229,8 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="Address to listen on (default: 127.0.0.1, this machine only). "
         "Use 0.0.0.0 to reach the app from other devices on your network, e.g. your phone.",
     )
-    parser.add_argument("--port", type=int, default=5000, help="Port to listen on (default: 5000)")
+    # Not 5000: macOS AirPlay Receiver listens there on all interfaces, which blocks --host 0.0.0.0.
+    parser.add_argument("--port", type=int, default=5001, help="Port to listen on (default: 5001)")
     parser.add_argument(
         "--debug",
         action="store_true",
