@@ -53,11 +53,9 @@ The default model used by `update-images.py` is `claude-sonnet-5-5`, which is pr
 ## 2. Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/image-caption.git
-cd image-caption
+git clone https://github.com/danny-englander/embed-image-metadata-llm.git
+cd embed-image-metadata-llm
 ```
-
-Replace the URL with the actual repo URL if different.
 
 ---
 

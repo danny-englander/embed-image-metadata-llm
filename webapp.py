@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Web UI for image-caption: bulk-upload images, run them through the same
+"""Web UI for embed-image-metadata-llm: bulk-upload images, run them through the same
 processing pipeline as update-images.py, and download the tagged files.
 
 Run with: flask --app webapp run
