@@ -37,6 +37,17 @@ class TestParseArgs(unittest.TestCase):
         args = parse("--alt", "--title", "--overwrite-title")
         self.assertEqual(args.overwrite, ("title",))
 
+    def test_overwrite_all_covers_every_selected_field_only(self):
+        args = parse("--alt", "--keywords", "--overwrite-all")
+        self.assertEqual(args.overwrite, ("alt", "keywords"))
+
+    def test_overwrite_all_still_requires_a_field(self):
+        self.assertIn("select at least one field", parse_error("--overwrite-all"))
+
+    def test_overwrite_all_combines_with_per_field_flags(self):
+        args = parse("--alt", "--title", "--overwrite-title", "--overwrite-all")
+        self.assertEqual(args.overwrite, ("alt", "title"))
+
     def test_overwrite_requires_its_field(self):
         self.assertIn("--overwrite-keywords requires --keywords", parse_error("--alt", "--overwrite-keywords"))
 

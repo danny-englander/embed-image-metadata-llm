@@ -175,13 +175,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fields.add_argument("--keywords", action="store_true", help="Generate IPTC Keywords (and Subject)")
 
-    overwrite = parser.add_argument_group("overwrite (each requires its field flag)")
+    overwrite = parser.add_argument_group("overwrite (per-field flags require their field flag)")
     overwrite.add_argument("--overwrite-alt", action="store_true", help="Replace existing alt text")
     overwrite.add_argument("--overwrite-title", action="store_true", help="Replace existing title")
     overwrite.add_argument(
         "--overwrite-description", action="store_true", help="Replace existing description"
     )
     overwrite.add_argument("--overwrite-keywords", action="store_true", help="Replace existing keywords")
+    overwrite.add_argument(
+        "--overwrite-all",
+        action="store_true",
+        help="Replace existing values for every selected field",
+    )
 
     style = parser.add_argument_group("style")
     style.add_argument(
@@ -203,12 +208,15 @@ def parse_args(argv=None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     args.context = args.context or args.context_positional
     args.fields = tuple(f for f in FIELDS if getattr(args, f))
-    args.overwrite = tuple(f for f in FIELDS if getattr(args, f"overwrite_{f}"))
+    args.overwrite = tuple(
+        f for f in FIELDS if args.overwrite_all or getattr(args, f"overwrite_{f}")
+    )
     if not args.fields:
         parser.error("select at least one field: --alt, --title, --description, --keywords")
-    for field in args.overwrite:
-        if field not in args.fields:
+    for field in FIELDS:
+        if getattr(args, f"overwrite_{field}") and field not in args.fields:
             parser.error(f"--overwrite-{field} requires --{field}")
+    args.overwrite = tuple(f for f in args.overwrite if f in args.fields)
     if args.creative_title and "title" not in args.fields:
         parser.error("--creative-title requires --title")
     if args.creative_description and "description" not in args.fields:
