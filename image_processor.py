@@ -59,7 +59,7 @@ TITLE_INSTRUCTION_CREATIVE = (
 )
 
 DESCRIPTION_INSTRUCTION_DEFAULT = (
-    "3-4 complete sentences expanding on the alt text. Describe subject, setting, style, and notable "
+    "3-4 complete sentences describing the image (building on the alt text when one is given). Describe subject, setting, style, and notable "
     "details in clear prose. Do not include Midjourney prompts, job IDs, or technical generation parameters."
 )
 
@@ -75,21 +75,32 @@ DESCRIPTION_INSTRUCTION_CREATIVE = (
     "or technical generation parameters."
 )
 
+FIELDS = ("alt", "title", "description", "keywords")
+IPTC_FIELDS = ("title", "description", "keywords")
+# exiftool tag checked to decide whether a field already has a value.
+EXISTING_TAGS = {
+    "alt": "AltTextAccessibility",
+    "title": "Title",
+    "description": "Description",
+    "keywords": "Keywords",
+}
+FIELD_LABELS = {
+    "alt": "alt text",
+    "title": "title",
+    "description": "description",
+    "keywords": "keywords",
+}
+
+KEYWORDS_INSTRUCTION = (
+    "a single comma-separated string of relevant search keywords/tags. Aim for approximately "
+    "{keywords_len} characters total. Prefer concrete nouns, styles, subjects, and themes. No duplicates."
+)
+
 IPTC_META_PROMPT = """You are helping tag a photograph for Adobe Bridge IPTC Core metadata.
-Given the image and this short alt text: {alt}
-
-Produce ONLY a JSON object (no markdown fences, no other text) with exactly these keys:
-- "title": {title_instruction}
-- "description": {description_instruction}
-- "keywords": a single comma-separated string of relevant search keywords/tags. Aim for approximately {keywords_len} characters total. Prefer concrete nouns, styles, subjects, and themes. No duplicates.
-
-{spelling_notes}{context_block}"""
-
-TITLE_ONLY_PROMPT = """You are helping tag a photograph for Adobe Bridge IPTC Core metadata.
 Look at the image{hint_clause}.
 
-Produce ONLY a JSON object (no markdown fences, no other text) with exactly this key:
-- "title": {title_instruction}
+Produce ONLY a JSON object (no markdown fences, no other text) with exactly {key_phrase}:
+{field_lines}
 
 {spelling_notes}{context_block}"""
 
@@ -105,6 +116,29 @@ def description_instruction(creative: bool = False) -> str:
     if not creative:
         return DESCRIPTION_INSTRUCTION_DEFAULT
     return DESCRIPTION_INSTRUCTION_CREATIVE.format(desc_len=DESCRIPTION_STORY_MAX_LEN)
+
+
+def build_metadata_prompt(
+    fields,
+    hints=(),
+    context: Optional[str] = None,
+    creative_title: bool = False,
+    creative_description: bool = False,
+) -> str:
+    """Prompt asking for exactly the requested IPTC fields (title, description, keywords)."""
+    instructions = {
+        "title": title_instruction(creative_title),
+        "description": description_instruction(creative_description),
+        "keywords": KEYWORDS_INSTRUCTION.format(keywords_len=KEYWORDS_TARGET_LEN),
+    }
+    wanted = [f for f in IPTC_FIELDS if f in fields]
+    return IPTC_META_PROMPT.format(
+        hint_clause=f" ({'; '.join(hints)})" if hints else "",
+        key_phrase="this key" if len(wanted) == 1 else "these keys",
+        field_lines="\n".join(f'- "{f}": {instructions[f]}' for f in wanted),
+        spelling_notes=replacement_prompt_notes(),
+        context_block=f"Additional context: {context}\n" if context else "",
+    )
 
 
 def get_existing_alt_text(image_path: Path) -> Optional[str]:
@@ -203,41 +237,45 @@ def truncate_description(description: str, max_len: Optional[int] = None) -> str
     return cut.strip()
 
 
-def write_iptc_metadata(
+def write_iptc_fields(
     image_path: Path,
-    title: str,
-    description: str,
-    keywords: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    keywords: Optional[str] = None,
     description_max_len: Optional[int] = None,
 ) -> bool:
-    """Overwrite Title, ObjectName, Description, Caption-Abstract, Keywords, and Subject via exiftool."""
+    """Write only the given IPTC fields via exiftool; fields left as None are untouched.
+
+    Title also sets ObjectName, Description also sets Caption-Abstract, and Keywords also sets
+    XMP-dc:Subject.
+    """
     exiftool = shutil.which("exiftool")
     if not exiftool:
         _print_error("❌ exiftool not found. Install with: brew install exiftool")
         return False
-    title = truncate_title(title)
-    description = truncate_description(description, description_max_len)
-    keywords = truncate_keywords(keywords)
-    if not title or not description or not keywords:
+    sets = []
+    if title is not None:
+        title = truncate_title(title)
+        if not title:
+            return False
+        sets += [f"-Title={title}", f"-ObjectName={title}"]
+    if description is not None:
+        description = truncate_description(description, description_max_len)
+        if not description:
+            return False
+        sets += [f"-Description={description}", f"-Caption-Abstract={description}"]
+    if keywords is not None:
+        keywords = truncate_keywords(keywords)
+        if not keywords:
+            return False
+        sets += [f"-Keywords={keywords}", f"-XMP-dc:Subject={keywords}"]
+    if not sets:
         return False
+    # Clear Keywords/Subject first so Bridge shows a full replace, not append.
+    clear = ["-Keywords=", "-XMP-dc:Subject="] if keywords is not None else []
     try:
-        # Clear Keywords/Subject first so Bridge shows a full replace, not append.
         result = subprocess.run(
-            [
-                exiftool,
-                "-overwrite_original",
-                "-Keywords=",
-                "-XMP-dc:Subject=",
-                "-sep",
-                ", ",
-                f"-Title={title}",
-                f"-ObjectName={title}",
-                f"-Keywords={keywords}",
-                f"-XMP-dc:Subject={keywords}",
-                f"-Description={description}",
-                f"-Caption-Abstract={description}",
-                str(image_path),
-            ],
+            [exiftool, "-overwrite_original", *clear, "-sep", ", ", *sets, str(image_path)],
             capture_output=True,
             text=True,
             timeout=20,
@@ -249,38 +287,6 @@ def write_iptc_metadata(
         return True
     except subprocess.TimeoutExpired:
         _print_error("  ❌ exiftool timed out writing IPTC")
-        return False
-
-
-def write_title_only(image_path: Path, title: str) -> bool:
-    """Overwrite only Title and ObjectName via exiftool. Leaves other IPTC fields alone."""
-    exiftool = shutil.which("exiftool")
-    if not exiftool:
-        _print_error("❌ exiftool not found. Install with: brew install exiftool")
-        return False
-    title = truncate_title(title)
-    if not title:
-        return False
-    try:
-        result = subprocess.run(
-            [
-                exiftool,
-                "-overwrite_original",
-                f"-Title={title}",
-                f"-ObjectName={title}",
-                str(image_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            stdin=subprocess.DEVNULL,
-        )
-        if result.returncode != 0:
-            _print_error(f"  ❌ exiftool title error: {result.stderr or result.stdout}")
-            return False
-        return True
-    except subprocess.TimeoutExpired:
-        _print_error("  ❌ exiftool timed out writing title")
         return False
 
 
@@ -346,100 +352,33 @@ def parse_iptc_json(raw: str) -> Optional[dict]:
     return data
 
 
-def generate_iptc_metadata(
+def generate_iptc_fields(
     image_path: Path,
     model: str,
-    alt: str,
-    context: Optional[str],
+    fields,
+    alt: Optional[str] = None,
+    context: Optional[str] = None,
     creative_title: bool = False,
     creative_description: bool = False,
-) -> Optional[tuple[str, str, str]]:
-    """Run llm vision call for title + description + keywords.
+) -> Optional[dict]:
+    """One llm vision call for the requested IPTC fields (title, description, keywords).
 
-    Returns (title, description, keywords) or None.
+    Returns {field: value} for exactly the requested fields, or None on failure.
     """
+    wanted = [f for f in IPTC_FIELDS if f in fields]
     llm_model = resolve_llm_model_id(model)
     if not llm_model:
         return None
 
-    context_block = ""
-    if context:
-        context_block = f"Additional context: {context}\n"
-
-    description_max_len = DESCRIPTION_STORY_MAX_LEN if creative_description else None
-    prompt = IPTC_META_PROMPT.format(
-        alt=alt,
-        title_instruction=title_instruction(creative_title),
-        description_instruction=description_instruction(creative_description),
-        keywords_len=KEYWORDS_TARGET_LEN,
-        spelling_notes=replacement_prompt_notes(),
-        context_block=context_block,
-    )
-    small_image = resize_image_for_llm(image_path)
-    cmd = ["llm", "-m", llm_model, "-a", str(small_image), prompt, *llm_option_args(model)]
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, stdin=subprocess.DEVNULL
-        )
-        if result.returncode != 0:
-            _print_error(f"  ❌ llm IPTC error: exit {result.returncode}.")
-            if result.stderr:
-                _print_detail(f"  stderr: {result.stderr.strip()}")
-            return None
-        data = parse_iptc_json(result.stdout)
-        if not data:
-            _print_error("  ❌ Could not parse IPTC JSON from model output.")
-            if result.stdout:
-                _print_detail(f"  stdout: {result.stdout.strip()[:200]}...")
-            return None
-        title = (data.get("title") or "").strip()
-        description = (data.get("description") or "").strip()
-        keywords = (data.get("keywords") or "").strip()
-        if isinstance(keywords, list):
-            keywords = ", ".join(str(k).strip() for k in keywords if str(k).strip())
-        if not title or not description or not keywords:
-            _print_error("  ❌ IPTC JSON missing title, description, or keywords.")
-            return None
-        return (
-            truncate_title(title),
-            truncate_description(description, description_max_len),
-            truncate_keywords(keywords),
-        )
-    except subprocess.TimeoutExpired:
-        _print_error("  ❌ llm timed out generating IPTC metadata.")
-        return None
-
-
-def generate_title_only(
-    image_path: Path,
-    model: str,
-    context: Optional[str],
-    creative_title: bool = False,
-) -> Optional[str]:
-    """Run llm vision call for title only. Uses existing Description/alt as hints when present."""
-    llm_model = resolve_llm_model_id(model)
-    if not llm_model:
-        return None
-
-    description = read_exif_field(image_path, "Description")
-    alt = get_existing_alt_text(image_path)
     hints = []
-    if description:
-        hints.append(f"existing description: {description}")
     if alt:
-        hints.append(f"existing alt text: {alt}")
-    hint_clause = f" ({'; '.join(hints)})" if hints else ""
+        hints.append(f"alt text: {alt}")
+    if "description" not in wanted:
+        existing_description = read_exif_field(image_path, "Description")
+        if existing_description:
+            hints.append(f"existing description: {existing_description}")
 
-    context_block = ""
-    if context:
-        context_block = f"Additional context: {context}\n"
-
-    prompt = TITLE_ONLY_PROMPT.format(
-        hint_clause=hint_clause,
-        title_instruction=title_instruction(creative_title),
-        spelling_notes=replacement_prompt_notes(),
-        context_block=context_block,
-    )
+    prompt = build_metadata_prompt(wanted, hints, context, creative_title, creative_description)
     small_image = resize_image_for_llm(image_path)
     cmd = ["llm", "-m", llm_model, "-a", str(small_image), prompt, *llm_option_args(model)]
     try:
@@ -447,23 +386,36 @@ def generate_title_only(
             cmd, capture_output=True, text=True, timeout=120, cwd=SCRIPT_DIR, stdin=subprocess.DEVNULL
         )
         if result.returncode != 0:
-            _print_error(f"  ❌ llm title error: exit {result.returncode}.")
+            _print_error(f"  ❌ llm error: exit {result.returncode}.")
             if result.stderr:
                 _print_detail(f"  stderr: {result.stderr.strip()}")
             return None
         data = parse_iptc_json(result.stdout)
         if not data:
-            _print_error("  ❌ Could not parse title JSON from model output.")
+            _print_error("  ❌ Could not parse JSON from model output.")
             if result.stdout:
                 _print_detail(f"  stdout: {result.stdout.strip()[:200]}...")
             return None
-        title = (data.get("title") or "").strip()
-        if not title:
-            _print_error("  ❌ Title JSON missing title.")
-            return None
-        return truncate_title(title)
+        values = {}
+        for field in wanted:
+            value = data.get(field) or ""
+            if isinstance(value, list):
+                value = ", ".join(str(v).strip() for v in value if str(v).strip())
+            value = str(value).strip()
+            if not value:
+                _print_error(f"  ❌ Model JSON missing {field}.")
+                return None
+            values[field] = value
+        if "title" in values:
+            values["title"] = truncate_title(values["title"])
+        if "description" in values:
+            max_len = DESCRIPTION_STORY_MAX_LEN if creative_description else None
+            values["description"] = truncate_description(values["description"], max_len)
+        if "keywords" in values:
+            values["keywords"] = truncate_keywords(values["keywords"])
+        return values
     except subprocess.TimeoutExpired:
-        _print_error("  ❌ llm timed out generating title.")
+        _print_error("  ❌ llm timed out generating metadata.")
         return None
 
 
@@ -500,23 +452,53 @@ def generate_alt_text(
         return None
 
 
+def _summary(result: dict) -> str:
+    """Human-readable one-line summary built from a result's written/skipped/failed lists."""
+    parts = []
+    if result["written"]:
+        parts.append("Written: " + ", ".join(FIELD_LABELS[f] for f in result["written"]))
+    if result["skipped"]:
+        parts.append(
+            "Skipped (already set, overwrite off): "
+            + ", ".join(FIELD_LABELS[f] for f in result["skipped"])
+        )
+    if result["failed"]:
+        parts.append(
+            "Failed: "
+            + "; ".join(f"{FIELD_LABELS[f]} ({reason})" for f, reason in result["failed"].items())
+        )
+    return ". ".join(parts)
+
+
 def process_single_image(
     image_path: Path,
     model: str,
     context: Optional[str] = None,
-    force: bool = False,
-    iptc: bool = False,
-    title_only: bool = False,
+    fields=(),
+    overwrite=(),
     creative_title: bool = False,
     creative_description: bool = False,
 ) -> dict:
-    """Generate and write metadata for one image. Pure logic, no printing.
+    """Generate and write the selected metadata fields for one image. Pure logic, no printing.
+
+    fields: which of "alt", "title", "description", "keywords" to generate.
+    overwrite: which selected fields may replace an existing value. A selected field that
+      already has a value and is not in overwrite is skipped; the others still run.
 
     Returns a dict:
       status: "written" | "skipped" | "error"
-      message: human-readable detail
+      message: human-readable summary
       alt / title / description / keywords: values written (or None)
+      written / skipped: lists of fields; failed: {field: reason}
+      existing: {field: current value} for skipped fields
     """
+    fields, overwrite = set(fields), set(overwrite)
+    unknown = (fields | overwrite) - set(FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown field(s): {', '.join(sorted(unknown))}")
+    if not fields:
+        raise ValueError("Select at least one field to generate.")
+
     result = {
         "status": "error",
         "message": "",
@@ -524,64 +506,66 @@ def process_single_image(
         "title": None,
         "description": None,
         "keywords": None,
+        "written": [],
+        "skipped": [],
+        "failed": {},
+        "existing": {},
     }
 
-    if title_only:
-        title = generate_title_only(image_path, model, context, creative_title)
-        if not title:
-            result["message"] = "Failed to generate title."
-            return result
-        if not write_title_only(image_path, title):
-            result["message"] = "Failed to write title."
-            return result
-        result["status"] = "written"
-        result["title"] = title
-        result["message"] = f"Written IPTC Title only ({len(title)} chars)"
+    todo = []
+    for field in FIELDS:
+        if field not in fields:
+            continue
+        current = None if field in overwrite else read_exif_field(image_path, EXISTING_TAGS[field])
+        if current:
+            result["skipped"].append(field)
+            result["existing"][field] = current
+        else:
+            todo.append(field)
+
+    if not todo:
+        result["status"] = "skipped"
+        result["message"] = _summary(result)
         return result
 
-    if not force:
-        existing = get_existing_alt_text(image_path)
-        if existing:
-            result["status"] = "skipped"
-            result["message"] = "Already has alt text (use force to overwrite)."
-            return result
+    alt_hint = None
+    if "alt" in todo:
+        alt = generate_alt_text(image_path, model, context)
+        if not alt:
+            result["failed"]["alt"] = "none generated"
+        # Never write error messages into the image metadata
+        elif alt.strip().lower().startswith("error") or "unknown model" in alt.lower():
+            result["failed"]["alt"] = f"caption failed: {alt[:60]}..."
+        else:
+            if len(alt) > ALT_TEXT_MAX_LEN:
+                alt = alt[: ALT_TEXT_MAX_LEN - 3] + "..."
+            if write_alt_text(image_path, alt):
+                result["alt"] = alt
+                result["written"].append("alt")
+                alt_hint = alt
+            else:
+                result["failed"]["alt"] = "write failed"
+    else:
+        alt_hint = get_existing_alt_text(image_path)
 
-    alt = generate_alt_text(image_path, model, context)
-    if not alt:
-        result["message"] = "No alt text generated."
-        return result
-    # Never write error messages into the image metadata
-    if alt.strip().lower().startswith("error") or "unknown model" in alt.lower():
-        result["message"] = f"Caption failed (not written): {alt[:60]}..."
-        return result
-    if len(alt) > ALT_TEXT_MAX_LEN:
-        alt = alt[: ALT_TEXT_MAX_LEN - 3] + "..."
-
-    if not write_alt_text(image_path, alt):
-        result["message"] = "Failed to write metadata."
-        return result
-
-    result["status"] = "written"
-    result["alt"] = alt
-    result["message"] = "Written to XMP AltTextAccessibility"
-
-    if iptc:
-        meta = generate_iptc_metadata(
-            image_path, model, alt, context, creative_title, creative_description
+    iptc_todo = [f for f in IPTC_FIELDS if f in todo]
+    if iptc_todo:
+        values = generate_iptc_fields(
+            image_path, model, iptc_todo, alt_hint, context, creative_title, creative_description
         )
-        if not meta:
-            result["message"] += "; failed to generate IPTC title/description/keywords."
-            return result
-        title, description, keywords = meta
-        description_max_len = DESCRIPTION_STORY_MAX_LEN if creative_description else None
-        if not write_iptc_metadata(
-            image_path, title, description, keywords, description_max_len
+        if not values:
+            result["failed"].update({f: "none generated" for f in iptc_todo})
+        elif not write_iptc_fields(
+            image_path,
+            **values,
+            description_max_len=DESCRIPTION_STORY_MAX_LEN if creative_description else None,
         ):
-            result["message"] += "; failed to write IPTC metadata."
-            return result
-        result["title"] = title
-        result["description"] = description
-        result["keywords"] = keywords
-        result["message"] += "; written IPTC Title, Description, and Keywords"
+            result["failed"].update({f: "write failed" for f in iptc_todo})
+        else:
+            for field, value in values.items():
+                result[field] = value
+                result["written"].append(field)
 
+    result["status"] = "error" if result["failed"] else "written"
+    result["message"] = _summary(result)
     return result
