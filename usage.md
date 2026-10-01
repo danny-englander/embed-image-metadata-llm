@@ -1,24 +1,6 @@
-# Usage: update-images.py vs update-images.py
+# Usage: update-images.py
 
-This document describes what each script does, how they differ, and whether they depend on each other.
-
----
-
-## Summary
-
-| | **update-images.py** | **update-images.py** |
-|---|---|---|
-| **Purpose** | Generate alt text and **write it into image files** (XMP metadata) | Generate alt text and titles and **push them to a website API** |
-| **Where output goes** | Local image files (exiftool / XMP AltTextAccessibility) | Remote API (HTTP PATCH to dri.es album) |
-| **Auth / API** | None (fully local) | Requires `AUTH_TOKEN` (env or `.env`) |
-| **Directory** | Any folder path you pass as argument | Subdirectory **under a fixed `BASE_DIR`** (hardcoded) |
-| **Shared dependency** | Uses `caption.py` | Uses `caption.py` |
-
-**They are not reliant on each other.** Both use `caption.py` to generate alt text, but they are independent workflows: one is local/file-based, the other is remote/API-based.
-
----
-
-## update-images.py
+`update-images.py` generates image metadata (alt text, IPTC title, description, and keywords) with an LLM and writes it into the image files themselves.
 
 **What it does**
 
@@ -28,7 +10,7 @@ This document describes what each script does, how they differ, and whether they
   - **Alt text** – calls **caption.py** (Anthropic/LLM via `llm` + `llm-anthropic`) and writes the **XMP Alt Text (Accessibility)** field using **exiftool** (limit 250 chars).
   - **Title / Description / Keywords** – one LLM call for whichever of the three are needed: a Title (up to 59 chars), Description (3–4 sentences by default; other styles via `--title-style` / `--description-style`), and ~500-character Keywords. Written to IPTC Core `Title`/`ObjectName`, `Description`/`Caption-Abstract`, and `Keywords`/`Subject` (full replace, not append).
 - A selected field that already has a value is skipped unless its overwrite flag is given; other selected fields still run.
-- No remote API and no `AUTH_TOKEN`. Requires:
+- Requires:
   - `exiftool` (e.g. `brew install exiftool`)
   - `llm` + `llm-anthropic`, API key via `llm keys set anthropic`
   - Optional: `IMAGE_CAPTION_CONFIG` / `models.yaml` (see caption.py)
@@ -58,54 +40,3 @@ python update-images.py /path/to/folder --keywords --overwrite-keywords
 - `--title-style` – with `--title`: `standard` (default), `creative`, `editorial`, `poetic`, or `literal`.
 - `--description-style` – with `--description`: `standard` (default), `creative` (short story, ≤375 characters), `caption` (one sentence, ≤200 characters), or `photographic`.
 - `--creative-title`, `--creative-description` – shortcuts for the `creative` style of each.
----
-
-## update-images.py
-
-**What it does**
-
-- Works with a **fixed base path** (`BASE_DIR`) and **website API** (`BASE_URL`). Out of the box it’s set up for `https://dri.es/album/` and a Dropbox images path.
-- For a given **subdirectory name** (relative to `BASE_DIR`):
-  - Finds images (`.jpg`, `.png`, `.gif` only).
-  - For each image:
-    - **GET**s existing metadata (title, caption, alt, verified) from the website API.
-    - Skips the image if it’s marked **verified** (unless `--force`).
-    - Calls **caption.py** to generate new alt text (with rich context: album, title, caption, existing alt, notes).
-    - Optionally **formats the title** via `llm` (sentence case, etc.).
-    - **PATCH**es new alt and/or title back to the website (and sets `verified: 0`).
-- Requires **AUTH_TOKEN** (environment variable or `.env`). No exiftool; metadata lives on the server, not in the file.
-
-**Typical use**
-
-- Batch-update alt text and titles **on the live website** for a specific album directory, with server-stored metadata and a “verified” flag.
-
-**Example**
-
-```bash
-export AUTH_TOKEN=your_token   # or use .env
-python update-images.py my-album-folder
-python update-images.py my-album-folder --context "Trip to Japan" --force
-```
-
-**Options**
-
-- `directory` – subdirectory under `BASE_DIR` to process.
-- `--model` – model for caption.py and for title formatting (default: `claude-sonnet-5-5`).
-- `--context` – extra notes included when generating alt text.
-- `--force` – process images even if they are marked verified.
-
----
-
-## How they relate to each other
-
-- **No direct dependency between the two scripts.** You never run one script from the other.
-- **Shared dependency:** both call **caption.py** as a subprocess to generate alt text. So:
-  - **caption.py** is the common piece (and may rely on `llm`, `models.yaml`, etc.).
-  - **update-images.py** and **update-images.py** are two separate **workflows** that both use that common caption generator.
-
-**When to use which**
-
-- Use **update-images.py** when you want alt text **stored in the image files** (XMP), with no server or token (e.g. local galleries, static sites).
-- Use **update-images.py** when you want to **update alt text and titles on the website** via its API, with server-side metadata and verification.
-
-You can use one, the other, or both in different parts of your pipeline; they do not rely on each other.

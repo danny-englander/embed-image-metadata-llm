@@ -4,8 +4,6 @@ This project generates image alt text using a LLM and writes it into image files
 
 These instructions assume macOS or Linux. Windows should work with equivalent tools, but commands may differ.
 
-Inspired by [Dries Buytaert's "Image Caption"](https://github.com/dbuytaert/image-caption), the key difference being how the generated alt text is stored. Dries' script sends a PATCH request to a remote API, where the alt text is stored server-side and matched to the image by album name and filename. This script instead writes the alt text directly into the image file itself, using `exiftool` to set the `AltTextAccessibility` XMP metadata field, so the alt text is embedded in the image itself.
-
 ---
 
 ## 1. Prerequisites
