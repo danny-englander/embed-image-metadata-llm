@@ -1,6 +1,25 @@
-## Overview
+# embed-image-metadata-llm
 
-This project generates image alt text using a LLM and writes it into image files as XMP Alt Text for accessibility as the image's `XMP-iptcCore:AltTextAccessibility` key.
+Generate image metadata with an LLM and embed it directly in your image files.
+
+For each image it can write:
+
+- **Alt text**, for accessibility, to the XMP `AltTextAccessibility` field.
+- **IPTC Title, Description and Keywords**, the fields Adobe Bridge and most photo tools read (stored in the matching XMP fields for HEIC/HEIF, which has no IPTC block).
+
+Use it from the command line (`update-images.py`) or from a browser (`webapp.py`), including from your phone on your home network.
+
+### Highlights
+
+- **Choose any combination of the four fields.** Each has its own overwrite option, plus an "overwrite all". A field that already has a value is skipped by default, so you can safely fill in only what's missing.
+- **Writing styles** for titles (standard, creative, editorial, poetic, literal) and descriptions (standard, creative, caption, photographic).
+- **Optional context**, such as "Cherry blossoms at the Japanese Friendship Garden", to improve results.
+- **A web interface** with instant thumbnails, live per-image results showing exactly what was written, skipped or failed for each field, a **Run again** button, and a zip download of the tagged images.
+- **Many formats:** JPEG, PNG, GIF, WebP, and HEIC/HEIF (iPhone photos).
+- **No database.** The metadata lives in the image files themselves.
+- **Powered by Claude** through the [`llm`](https://llm.datasette.io/) CLI: Sonnet 5.5 by default, with Sonnet 4.6 available.
+
+> **Before you run it:** the command-line tool writes metadata into your files **in place**, with no `_original` backup copies, so work on copies of anything you can't regenerate. (The web interface works on uploaded copies and gives you the tagged files back as a zip, so your originals are untouched.) Either way, images are downscaled to 1024 px on the long side and sent to the Anthropic API, so don't use it on photos you aren't willing to send there.
 
 These instructions assume macOS or Linux. Windows should work with equivalent tools, but commands may differ.
 
@@ -11,7 +30,7 @@ These instructions assume macOS or Linux. Windows should work with equivalent to
 - **Python**: 3.10+ (3.11/3.12 recommended)
 - **Git**
 - **System tools**:
-  - `exiftool` (for writing XMP Alt Text into images)
+  - `exiftool` (for writing metadata into images)
 - **LLM CLI tooling**:
   - [`llm`](https://llm.datasette.io/) (CLI wrapper)
   - The `llm-anthropic` plugin (installed via `requirements.txt`) and an Anthropic API key
@@ -77,20 +96,19 @@ pip install -r requirements.txt
 
 `requirements.txt` includes:
 
-- `llm`
-- `pillow`
-- `pillow-heif` (HEIC/HEIF support, e.g. iPhone photos)
-- `pyyaml`
-- `requests`
-- `python-dotenv`
+- `llm` and `llm-anthropic` (the LLM CLI and its Anthropic plugin)
+- `pillow` and `pillow-heif` (image handling, including HEIC/HEIF for iPhone photos)
+- `flask` (the web interface)
+- `pyyaml`, `requests`, `python-dotenv`
 
 ---
 
 ## 5. Models configuration (`models.yaml`)
 
-The file `models.yaml` (already in the repo) defines the available models and prompts for image captioning.
+The file `models.yaml` (already in the repo) defines the available models and the prompt used for alt text. The title, description and keyword prompts live in `image_processor.py`.
 
 - It defines two models: `claude-sonnet-5-5` (default) and `claude-sonnet-4-6`.
+- An optional `settings:` block on a model is passed to `llm` as `-o key value` options. `claude-sonnet-5-5` uses `thinking_effort: medium`, which keeps token use predictable.
 - `update-images.py` will automatically set the `IMAGE_CAPTION_CONFIG` environment variable to point to this file, so you normally do **not** need to configure it manually.
 
 If you create your own config file elsewhere, you can override the default by setting:
@@ -116,7 +134,7 @@ These rules are always applied in every generated field (alt text, title, descri
 
 ---
 
-## 6. Basic usage (local XMP alt text workflow)
+## 6. Command-line usage
 
 The primary script in this repo is `update-images.py`, which:
 
@@ -246,10 +264,10 @@ python update-images.py /path/to/image/folder --title --description \
 
 ### 7.2. Run unit tests
 
-There are unit tests for caption cleaning, word replacements, prompt building, per-field selection and overwrite logic, and CLI flag validation:
+There are unit tests for caption cleaning, word replacements, prompt building, per-field selection and overwrite logic, HEIC handling, CLI flag validation and the web app's options:
 
 ```bash
-python -m unittest test_caption.py test_replacements.py test_image_processor.py test_update_images.py
+python -m unittest discover
 ```
 
 All tests should pass.
@@ -273,6 +291,12 @@ All tests should pass.
   ```
 
   Confirm that the model you are using (e.g. `claude-sonnet-5-5`) is listed and working.
+
+- **HEIC/HEIF files fail**
+  These need the `pillow-heif` package. Reinstall the dependencies with `pip install -r requirements.txt`.
+
+- **`llm` not found**
+  The scripts look for `llm` next to the Python that is running them, so activating the virtualenv is not required. If you run them with a Python outside the project's virtualenv, install the requirements there.
 
 - **LLM API key issues**
   Re-run:
@@ -343,7 +367,7 @@ Progress and results are shown live; when done, download a zip of the tagged ima
 `image_processor.py` logic in-process).
 
 Notes:
-- Single-user local tool: no auth, in-memory job tracking, one job processed at a time.
+- Single-user local tool: no auth, and job tracking is in memory, so jobs are lost if the server restarts.
 - Uploaded/processed files live in a temp directory per job and aren't cleaned up automatically.
 
 ## 10. Summary
@@ -357,5 +381,5 @@ Notes:
    python update-images.py /path/to/images --alt --title --description --keywords [--overwrite-alt] [--overwrite-title] [--overwrite-description] [--overwrite-keywords] [--overwrite-all] [--context ...] [--model ...] [--title-style STYLE] [--description-style STYLE]
    ```
 
-   to generate and embed the fields you select (use any combination of the four field flags; at least one is required), with optional title and description writing styles.
+   to generate and embed the fields you select (use any combination of the four field flags; at least one is required), with optional title and description writing styles. Or run `python webapp.py` for the browser interface.
 
