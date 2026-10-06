@@ -4,101 +4,272 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Image Caption</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
   <style>
+    /* Dusk theme: dark violet ground, teal -> violet -> pink accents. */
     :root {
       color-scheme: dark;
-      --bg: #16171c;
-      --panel: #1f2128;
-      --border: #34363f;
-      --text: #e6e6ea;
-      --muted: #9599a6;
-      --accent: #4f8cff;
-      --ok: #4ade80;
-      --err: #f87171;
+      --bg: #171428;
+      --surface: rgba(34, 29, 56, 0.82);
+      --field: #1c1830;
+      --track: #2a2444;
+      --border: #3a3454;
+      --border-strong: #4d4670;
+      --text: #ece9f1;
+      --text-2: #cfcad9;
+      --muted: #b3aec0;
+      --disabled: #8a849a;
+      --placeholder: #6b6474;
+      --link: #c9a8ff;
+      --teal: #6ee0d0;
+      --violet: #9b8cf7;
+      --pink: #f4a0d2;
       --skip: #fbbf24;
+      --dots: linear-gradient(135deg, #6ee0d0, #9b8cf7, #f4a0d2);
+      --dots-x: linear-gradient(90deg, #6ee0d0, #9b8cf7, #f4a0d2);
+      --ring: 0 0 0 3px rgba(155, 140, 247, 0.3);
+      --font-display: "Cormorant Garamond", Georgia, serif;
+      --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5l4 4 4-4' fill='none' stroke='%23b3aec0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
+    html { background: var(--bg); }
     body {
       margin: 0;
-      background: var(--bg);
+      min-height: 100vh;
+      background:
+        radial-gradient(70% 60% at 80% -5%, rgba(120, 100, 220, 0.45), transparent 65%),
+        radial-gradient(60% 50% at 10% 100%, rgba(90, 60, 140, 0.35), transparent 70%),
+        linear-gradient(180deg, #1a1730 0%, #171428 50%, #1c1633 100%);
       color: var(--text);
-      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      padding: 2rem 1rem 4rem;
+      font: 18px/1.7 var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      padding: clamp(28px, 6vw, 56px) clamp(14px, 4vw, 24px) 96px;
     }
-    main { max-width: 900px; margin: 0 auto; }
-    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
-    p.sub { color: var(--muted); margin-top: 0; }
+    main { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { color: var(--pink); }
+    ::placeholder { color: var(--placeholder); }
+    select option { background: #221d38; color: var(--text); }
+
+    /* Header */
+    header { display: flex; flex-direction: column; gap: 20px; }
+    .logo { height: 56px; width: auto; align-self: flex-start; }
+    .title-block { display: flex; flex-direction: column; gap: 8px; }
+    h1 {
+      margin: 0;
+      font: 500 clamp(38px, 9vw, 52px)/1.1 var(--font-display);
+      letter-spacing: -0.01em;
+    }
+    p.sub { margin: 0; color: var(--text-2); font-size: 19px; text-wrap: pretty; }
+    .rule { height: 4px; width: 96px; border-radius: 2px; background: var(--dots-x); }
+
+    /* Cards */
     .panel {
-      background: var(--panel);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 1.5rem;
+      border-radius: 20px;
+      padding: clamp(16px, 4vw, 28px);
+      backdrop-filter: blur(6px);
     }
-    label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
-    .field { margin-bottom: 1.1rem; }
+    form.panel {
+      padding: clamp(20px, 5vw, 40px);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(28px, 5vw, 36px);
+    }
+    .field { display: flex; flex-direction: column; gap: 12px; }
+    label, .label { display: block; font-weight: 600; }
+    .hint { color: var(--muted); font-size: 16px; text-wrap: pretty; margin: 0; }
+    .optional { font-weight: 400; color: var(--muted); }
+
+    /* Text inputs and selects */
     input[type="text"], select {
-      width: 100%;
-      padding: 0.5rem 0.6rem;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.95rem;
-      background: var(--panel);
+      font: inherit;
       color: var(--text);
+      background-color: var(--field);
+      border: 1px solid var(--border);
+      outline: none;
     }
-    input[type="file"] { width: 100%; }
+    input[type="text"]:focus, select:focus { border-color: var(--violet); box-shadow: var(--ring); }
+    select {
+      appearance: none;
+      background-image: var(--chevron);
+      background-repeat: no-repeat;
+      cursor: pointer;
+    }
+    #model, #context { width: 100%; font-size: 18px; border-radius: 12px; padding: 14px 18px; }
+    #model {
+      padding-right: 48px;
+      background-position: right 20px center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    /* Drop zone */
     .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: 8px;
-      padding: 1.75rem 1rem;
+      border: 1.5px dashed var(--border-strong);
+      background: rgba(23, 20, 40, 0.4);
+      border-radius: 16px;
+      padding: clamp(28px, 7vw, 48px) 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
       text-align: center;
       cursor: pointer;
-      margin-bottom: 0.6rem;
       transition: border-color 0.15s, background 0.15s;
     }
-    .drop-zone:hover, .drop-zone:focus-visible { border-color: var(--accent); }
-    .drop-zone.drag-over { border-color: var(--accent); background: rgba(79, 140, 255, 0.08); }
+    .drop-zone:hover, .drop-zone:focus-visible { border-color: var(--violet); }
+    .drop-zone:focus-visible { outline: none; box-shadow: var(--ring); }
+    .drop-zone.drag-over { border-color: var(--violet); background: rgba(155, 140, 247, 0.12); }
     .drop-zone p { margin: 0; }
-    .drop-zone .drop-zone-text { color: var(--text); }
-    .drop-zone .drop-zone-count { margin-top: 0.35rem; }
-    .fallback-label { font-weight: 400; color: var(--muted); margin: 0.5rem 0 0.35rem; }
-    .field-list { display: flex; flex-direction: column; gap: 0.75rem; }
-    .field-row { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
-    .field-row label {
-      font-weight: 400;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      margin: 0;
-    }
-    label.inline-check { font-weight: 600; display: flex; align-items: center; gap: 0.4rem; margin: 0; }
-    .field-row label.field-name { font-weight: 600; min-width: 10rem; }
-    .field-row label.dependent { color: var(--muted); }
-    .field-row label.dependent:has(:disabled) { opacity: 0.5; }
-    .field-row select { width: auto; padding: 0.2rem 0.4rem; font-size: 0.85rem; }
-    .field-hint { margin: 0.25rem 0 0 1.4rem; }
-    .hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
+    .drop-zone .drop-zone-text { font-size: 19px; font-weight: 500; }
+    .drop-zone .drop-zone-text span { color: var(--link); }
+    .drop-zone .hint { font-size: 15px; }
+    .file-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    #file-count-label { font-size: 16px; }
+
+    /* Buttons */
     button {
-      background: var(--accent);
-      color: #fff;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--bg);
+      background: var(--dots);
       border: none;
-      border-radius: 6px;
-      padding: 0.6rem 1.2rem;
-      font-size: 0.95rem;
+      border-radius: 999px;
+      padding: 10px 24px;
       cursor: pointer;
     }
+    button:hover:not(:disabled) { filter: brightness(1.08); }
+    button:active:not(:disabled) { transform: translateY(1px); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-    #error { color: var(--err); margin-top: 0.75rem; display: none; }
+    button:focus-visible { outline: none; box-shadow: var(--ring); }
+    button.secondary {
+      font-weight: 500;
+      color: var(--text);
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      padding: 8px 20px;
+    }
+    button.secondary:hover:not(:disabled) { filter: none; border-color: var(--violet); background: rgba(155, 140, 247, 0.1); }
+    #submit-btn { font-size: 18px; padding: 14px 32px; box-shadow: 0 6px 24px rgba(155, 140, 247, 0.35); }
+    .submit-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    #error { color: var(--pink); font-size: 16px; display: none; }
+
+    /* Field group: switch rows */
+    .field-list, .overwrite-all {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+    .field-list { display: flex; flex-direction: column; overflow: hidden; }
+    .field-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: clamp(16px, 4vw, 20px) clamp(16px, 4vw, 24px);
+    }
+    .field-item + .field-item { border-top: 1px solid var(--border); }
+    .field-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+      align-items: center;
+      gap: 12px 28px;
+    }
+    .field-row label, label.inline-check {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 0;
+      cursor: pointer;
+    }
+    .field-row label.dependent { gap: 12px; font-weight: 400; font-size: 16px; color: var(--text-2); }
+    .field-row label.dependent:has(:disabled) { color: var(--disabled); cursor: not-allowed; }
+    .field-row label.dependent:has(:disabled) input { opacity: 0.55; cursor: not-allowed; }
+    .field-row label.style-select { color: var(--muted); cursor: default; }
+    .field-row select {
+      font-size: 16px;
+      border-radius: 10px;
+      padding: 6px 36px 6px 14px;
+      background-position: right 13px center;
+      background-size: 12px;
+    }
+    .field-row select:disabled { opacity: 0.55; cursor: not-allowed; }
+    .field-hint { padding-left: 60px; }
+    .overwrite-all {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: clamp(16px, 4vw, 20px) clamp(16px, 4vw, 24px);
+      background: linear-gradient(180deg, rgba(120, 100, 220, 0.16), rgba(200, 120, 220, 0.08));
+    }
+    .overwrite-all .hint { padding-left: 60px; }
+    @media (max-width: 480px) {
+      .field-hint, .overwrite-all .hint { padding-left: 0; }
+    }
+
+    /* Toggle switch: a real checkbox drawn as a switch, so form names and JS are unchanged. */
+    input[type="checkbox"].switch {
+      appearance: none;
+      position: relative;
+      flex: none;
+      width: 46px;
+      height: 26px;
+      margin: 0;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--track);
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    input[type="checkbox"].switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      transition: left 0.2s, background 0.2s;
+    }
+    input[type="checkbox"].switch:checked { background: var(--dots); border-color: transparent; }
+    input[type="checkbox"].switch:checked::after { left: 22px; background: #fff; }
+    input[type="checkbox"].switch:focus-visible { outline: none; box-shadow: var(--ring); }
+    input[type="checkbox"].switch:disabled { cursor: not-allowed; }
+    input[type="checkbox"].switch.sm { width: 38px; height: 22px; }
+    input[type="checkbox"].switch.sm::after { width: 16px; height: 16px; }
+    input[type="checkbox"].switch.sm:checked::after { left: 18px; }
+
+    /* Progress and results */
     #progress-panel, #results-panel { display: none; }
-    progress { width: 100%; height: 10px; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    #progress-label { margin: 0 0 10px; }
+    progress {
+      appearance: none;
+      display: block;
+      width: 100%;
+      height: 10px;
+      border: none;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--track);
+    }
+    progress::-webkit-progress-bar { background: var(--track); }
+    progress::-webkit-progress-value { background: var(--dots-x); border-radius: 999px; transition: width 0.3s; }
+    progress::-moz-progress-bar { background: var(--dots-x); border-radius: 999px; }
+    #results-title { margin: 0 0 14px; font: 600 28px/1.2 var(--font-display); }
+    table { width: 100%; border-collapse: collapse; font-size: 16px; line-height: 1.5; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; }
-    .results-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-    .result-item { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
-    .result-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; }
+    .results-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .result-item { border: 1px solid var(--border); border-radius: 14px; background: var(--field); }
+    .result-head { display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
     summary.result-head { cursor: pointer; list-style: none; }
     summary.result-head::-webkit-details-marker { display: none; }
     summary.result-head::after {
@@ -106,69 +277,85 @@
       flex: none;
       width: 30px;
       height: 30px;
-      border: 1px solid var(--accent);
+      border: 1px solid var(--violet);
       border-radius: 50%;
-      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f8cff' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / 18px 18px no-repeat;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239b8cf7' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / 18px 18px no-repeat;
       transition: transform 0.2s, background-color 0.15s;
     }
-    summary.result-head:hover::after, summary.result-head:focus-visible::after { background-color: rgba(79, 140, 255, 0.18); }
-    details[open] > summary.result-head::after { transform: rotate(180deg); background-color: rgba(79, 140, 255, 0.18); }
-    summary.result-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
-    summary.result-head:hover { background: rgba(255, 255, 255, 0.03); }
+    summary.result-head:hover::after, summary.result-head:focus-visible::after { background-color: rgba(155, 140, 247, 0.18); }
+    details[open] > summary.result-head::after { transform: rotate(180deg); background-color: rgba(155, 140, 247, 0.18); }
+    summary.result-head:focus-visible { outline: none; box-shadow: inset var(--ring); border-radius: 14px; }
+    summary.result-head:hover { background: rgba(255, 255, 255, 0.03); border-radius: 14px; }
     .thumb {
-      width: 56px; height: 56px; flex: none; border-radius: 6px; overflow: hidden;
-      background: var(--border); display: flex; align-items: center; justify-content: center;
-      color: var(--muted); font-size: 0.7rem; text-transform: uppercase;
+      width: 56px; height: 56px; flex: none; border-radius: 10px; overflow: hidden;
+      background: var(--track); display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 12px; text-transform: uppercase;
     }
     .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .result-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
-    .result-status { font-size: 0.85rem; }
+    .result-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; font-size: 16px; }
+    .result-status { font-size: 16px; }
     .status-pending { color: var(--muted); }
-    .result-body { padding: 0 0.75rem 0.75rem; }
+    .result-body { padding: 0 14px 14px; }
     .result-body table { table-layout: fixed; }
     .result-body th:nth-child(1) { width: 8.5rem; }
     .result-body th:nth-child(2) { width: 9.5rem; }
     .result-body td.value { overflow-wrap: anywhere; white-space: pre-wrap; }
     .result-body td.value.kept { color: var(--muted); }
-    .result-body .chars { color: var(--muted); font-size: 0.8rem; }
-    .result-note { color: var(--muted); margin: 0.5rem 0 0; }
-    .field-note { display: block; color: var(--muted); font-size: 0.8rem; }
+    .result-body .chars { color: var(--muted); font-size: 14px; }
+    .result-note { color: var(--muted); margin: 8px 0 0; font-size: 16px; }
+    .field-note { display: block; color: var(--muted); font-size: 14px; }
     @media (max-width: 600px) {
       /* Stack each field into a card: field + outcome on one line, value beneath. */
       .result-body table, .result-body tbody { display: block; }
       .result-body thead { display: none; }
       .result-body tr {
-        display: grid; grid-template-columns: 1fr auto; column-gap: 0.75rem;
-        padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+        display: grid; grid-template-columns: 1fr auto; column-gap: 12px;
+        padding: 8px 0; border-bottom: 1px solid var(--border);
       }
-      .result-body td { border: none; padding: 0.1rem 0; }
+      .result-body td { border: none; padding: 2px 0; }
       .result-body td:nth-child(2) { text-align: right; }
       .result-body td.value { grid-column: 1 / -1; }
     }
-    .status-written { color: var(--ok); font-weight: 600; }
+    .status-written { color: var(--teal); font-weight: 600; }
     .status-skipped { color: var(--skip); font-weight: 600; }
-    .status-error { color: var(--err); font-weight: 600; }
-    .actions { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; }
+    .status-error { color: var(--pink); font-weight: 600; }
+    .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Image Caption</h1>
-  <p class="sub">Bulk-generate alt text and IPTC title, description, and keywords for a batch of images.</p>
+  <header>
+    <svg class="logo" viewBox="0 0 563 449" role="img" aria-label="Logo">
+      <defs><linearGradient id="dusk-logo" gradientUnits="userSpaceOnUse" x1="344" y1="1996" x2="940" y2="2482"><stop offset="0" stop-color="#6ee0d0"/><stop offset="0.5" stop-color="#9b8cf7"/><stop offset="1" stop-color="#f4a0d2"/></linearGradient></defs>
+      <g transform="matrix(1,0,0,1,-543.551371,-1397.082238)"><g transform="matrix(0.944514,0,0,0.921378,218.537174,-441.819047)" fill="url(#dusk-logo)">
+        <path d="M344.107,2130.495L434.782,2130.495L434.782,2472.526L344.107,2472.526L344.107,2130.495ZM344.107,1995.816L434.782,1995.816L434.782,2077.157L344.107,2077.157L344.107,1995.816Z"/>
+        <path d="M652.135,2482.527C625.022,2482.527 600.686,2477.86 579.129,2468.526C557.571,2459.192 539.236,2446.413 524.124,2430.189C509.011,2413.965 497.344,2394.852 489.121,2372.85C480.898,2350.848 476.786,2327.18 476.786,2301.844C476.786,2276.508 480.787,2252.839 488.787,2230.837C496.788,2208.835 508.233,2189.723 523.124,2173.499C538.014,2157.275 555.904,2144.496 576.795,2135.162C597.686,2125.828 621.244,2121.161 647.468,2121.161C669.693,2121.161 689.694,2124.272 707.474,2130.495C725.253,2136.718 740.699,2145.274 753.811,2156.164C766.924,2167.054 777.591,2180.166 785.814,2195.501C794.037,2210.836 799.704,2227.837 802.816,2246.506L714.141,2246.506C711.03,2231.393 704.029,2218.836 693.139,2208.835C682.249,2198.835 668.359,2193.834 651.469,2193.834C623.911,2193.834 603.242,2203.502 589.463,2222.837C575.684,2242.172 568.795,2268.508 568.795,2301.844C568.795,2334.291 575.351,2360.405 588.463,2380.184C601.575,2399.964 622.133,2409.854 650.135,2409.854C668.804,2409.854 684.138,2405.076 696.139,2395.519C708.141,2385.963 715.697,2371.406 718.808,2351.848L806.149,2351.848C804.816,2370.072 800.26,2387.074 792.482,2402.853C784.703,2418.632 774.258,2432.411 761.145,2444.19C748.033,2455.969 732.254,2465.303 713.808,2472.193C695.362,2479.082 674.804,2482.527 652.135,2482.527Z"/>
+        <path d="M842.153,2175.166L939.495,2175.166L939.495,2271.841L842.153,2271.841L842.153,2175.166ZM842.153,2375.851L939.495,2375.851L939.495,2472.526L842.153,2472.526L842.153,2375.851Z"/>
+      </g></g>
+    </svg>
+    <div class="title-block">
+      <h1>Image Caption</h1>
+      <p class="sub">Bulk-generate alt text and IPTC title, description, and keywords for a batch of images.</p>
+    </div>
+    <div class="rule"></div>
+  </header>
 
   <form id="upload-form" class="panel" enctype="multipart/form-data">
-    <div class="field">
-      <label for="images">Images</label>
+    <section class="field">
+      <div class="label">Images</div>
       <div id="drop-zone" class="drop-zone" tabindex="0" role="button" aria-controls="images">
-        <p class="drop-zone-text">Drag &amp; drop images here, or click to browse</p>
-        <p class="drop-zone-count hint" id="file-count-label"></p>
+        <p class="drop-zone-text">Drag &amp; drop images here, or <span>click to browse</span></p>
+        <p class="hint">JPEG, PNG, GIF, WebP or HEIC/HEIF</p>
       </div>
-      <p class="fallback-label">Or choose files directly:</p>
       <input type="file" id="images" name="images" multiple
-             accept=".jpg,.jpeg,.png,.gif,.heic,.heif,.webp" required>
-    </div>
+             accept=".jpg,.jpeg,.png,.gif,.heic,.heif,.webp" hidden>
+      <div class="file-row">
+        <button type="button" class="secondary" id="choose-btn">Choose files</button>
+        <span class="hint" id="file-count-label">No files chosen</span>
+      </div>
+    </section>
 
-    <div class="field">
+    <section class="field">
       <label for="model">Model</label>
       <select id="model" name="model">
         {% for m in models %}
@@ -179,56 +366,60 @@
         </option>
         {% endfor %}
       </select>
-    </div>
+    </section>
 
-    <div class="field">
-      <label for="context">Context <span class="hint" style="font-weight:400;">(optional)</span></label>
+    <section class="field">
+      <label for="context">Context <span class="optional">(optional)</span></label>
       <input type="text" id="context" name="context"
              placeholder="e.g. Cherry blossoms at Japanese Friendship Garden">
-    </div>
+    </section>
 
-    <div class="field">
-      <label>Fields to generate</label>
-      <p class="hint" style="margin-top:0; margin-bottom:0.75rem;">Pick at least one. A field that already has a value is skipped unless its Overwrite box is checked.</p>
+    <section class="field" style="gap:20px;">
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div class="label">Fields to generate</div>
+        <p class="hint" style="font-size:17px;">Pick at least one. A field that already has a value is skipped unless its Overwrite switch is on.</p>
+      </div>
       <div class="field-list">
-        <div>
+        <div class="field-item">
           <div class="field-row">
-            <label class="field-name"><input type="checkbox" name="alt" data-field="alt"> Alt text</label>
-            <label class="dependent"><input type="checkbox" name="overwrite_alt" data-overwrite-for="alt" disabled> Overwrite existing</label>
+            <label class="field-name"><input type="checkbox" role="switch" class="switch" name="alt" data-field="alt"><span>Alt text</span></label>
+            <label class="dependent"><input type="checkbox" role="switch" class="switch sm" name="overwrite_alt" data-overwrite-for="alt" disabled><span>Overwrite existing</span></label>
           </div>
         </div>
-        <div>
+        <div class="field-item">
           <div class="field-row">
-            <label class="field-name"><input type="checkbox" name="title" data-field="title"> IPTC Title</label>
-            <label class="dependent"><input type="checkbox" name="overwrite_title" data-overwrite-for="title" disabled> Overwrite existing</label>
-            <label class="dependent style-select">Style <select name="title_style" id="title_style" data-style-for="title" disabled><option value="standard">Standard</option><option value="creative">Creative</option><option value="editorial">Editorial</option><option value="poetic">Poetic</option><option value="literal">Literal</option></select></label>
+            <label class="field-name"><input type="checkbox" role="switch" class="switch" name="title" data-field="title"><span>IPTC Title</span></label>
+            <label class="dependent"><input type="checkbox" role="switch" class="switch sm" name="overwrite_title" data-overwrite-for="title" disabled><span>Overwrite existing</span></label>
+            <label class="dependent style-select"><span>Style</span><select name="title_style" id="title_style" data-style-for="title" disabled><option value="standard">Standard</option><option value="creative">Creative</option><option value="editorial">Editorial</option><option value="poetic">Poetic</option><option value="literal">Literal</option></select></label>
           </div>
           <p class="hint field-hint" id="title_style_hint"></p>
         </div>
-        <div>
+        <div class="field-item">
           <div class="field-row">
-            <label class="field-name"><input type="checkbox" name="description" data-field="description"> IPTC Description</label>
-            <label class="dependent"><input type="checkbox" name="overwrite_description" data-overwrite-for="description" disabled> Overwrite existing</label>
-            <label class="dependent style-select">Style <select name="description_style" id="description_style" data-style-for="description" disabled><option value="standard">Standard</option><option value="creative">Creative</option><option value="caption">Caption</option><option value="photographic">Photographic</option></select></label>
+            <label class="field-name"><input type="checkbox" role="switch" class="switch" name="description" data-field="description"><span>IPTC Description</span></label>
+            <label class="dependent"><input type="checkbox" role="switch" class="switch sm" name="overwrite_description" data-overwrite-for="description" disabled><span>Overwrite existing</span></label>
+            <label class="dependent style-select"><span>Style</span><select name="description_style" id="description_style" data-style-for="description" disabled><option value="standard">Standard</option><option value="creative">Creative</option><option value="caption">Caption</option><option value="photographic">Photographic</option></select></label>
           </div>
           <p class="hint field-hint" id="description_style_hint"></p>
         </div>
-        <div>
+        <div class="field-item">
           <div class="field-row">
-            <label class="field-name"><input type="checkbox" name="keywords" data-field="keywords"> IPTC Keywords</label>
-            <label class="dependent"><input type="checkbox" name="overwrite_keywords" data-overwrite-for="keywords" disabled> Overwrite existing</label>
+            <label class="field-name"><input type="checkbox" role="switch" class="switch" name="keywords" data-field="keywords"><span>IPTC Keywords</span></label>
+            <label class="dependent"><input type="checkbox" role="switch" class="switch sm" name="overwrite_keywords" data-overwrite-for="keywords" disabled><span>Overwrite existing</span></label>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="field">
-      <label class="inline-check"><input type="checkbox" name="overwrite_all" id="overwrite_all"> Overwrite all existing values</label>
-      <p class="hint">Replace whatever is already there for every selected field. The per-field Overwrite boxes above are locked while this is checked.</p>
-    </div>
+      <div class="overwrite-all">
+        <label class="inline-check"><input type="checkbox" role="switch" class="switch" name="overwrite_all" id="overwrite_all"><span>Overwrite all existing values</span></label>
+        <p class="hint">Replace whatever is already there for every selected field. The per-field Overwrite switches above are locked while this is on.</p>
+      </div>
+    </section>
 
-    <button type="submit" id="submit-btn">Upload &amp; Process</button>
-    <div id="error"></div>
+    <div class="submit-row">
+      <button type="submit" id="submit-btn">Upload &amp; Process</button>
+      <div id="error"></div>
+    </div>
   </form>
 
   <div class="panel" id="progress-panel">
@@ -237,7 +428,7 @@
   </div>
 
   <div class="panel" id="results-panel">
-    <h2 id="results-title" style="font-size:1.1rem;">Results</h2>
+    <h2 id="results-title">Results</h2>
     <ul class="results-list" id="results-list"></ul>
     <div class="actions" id="results-actions" hidden>
       <a id="download-link" href="#" style="display:none;"><button type="button">Download tagged images (.zip)</button></a>
@@ -335,7 +526,7 @@ function isAcceptedFile(file) {
 
 function updateFileCount() {
   const n = imagesInput.files.length;
-  fileCountLabel.textContent = n === 0 ? "" : `${n} file${n === 1 ? "" : "s"} selected`;
+  fileCountLabel.textContent = n === 0 ? "No files chosen" : `${n} image${n === 1 ? "" : "s"} selected`;
   if (!jobRunning) renderSelection();
 }
 
@@ -367,6 +558,7 @@ function addFiles(fileList) {
 imagesInput.addEventListener("change", updateFileCount);
 
 dropZone.addEventListener("click", () => imagesInput.click());
+document.getElementById("choose-btn").addEventListener("click", () => imagesInput.click());
 dropZone.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
@@ -554,9 +746,15 @@ async function poll(jobId) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   errorBox.style.display = "none";
+  // The file input is hidden (so it can't use the browser's `required` bubble); check it here.
+  if (imagesInput.files.length === 0) {
+    errorBox.style.display = "block";
+    errorBox.textContent = "Add at least one image.";
+    return;
+  }
   if (!fieldBoxes.some((box) => box.checked)) {
     errorBox.style.display = "block";
-    errorBox.textContent = "Select at least one field to generate.";
+    errorBox.textContent = "Pick at least one field to generate.";
     errorBox.scrollIntoView({ block: "center" });
     return;
   }
@@ -595,6 +793,9 @@ form.addEventListener("submit", async (e) => {
     rerunBtn.hidden = !hasFinishedJob; // earlier results are still on screen
   }
 });
+
+// A validation message goes away as soon as the user changes something.
+form.addEventListener("change", () => { errorBox.style.display = "none"; });
 
 // Re-submit the same images with whatever options are currently ticked.
 rerunBtn.addEventListener("click", () => form.requestSubmit());
