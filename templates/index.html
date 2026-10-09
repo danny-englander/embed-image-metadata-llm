@@ -134,6 +134,24 @@
     .file-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     #file-count-label { font-size: 16px; }
 
+    /* Selected-file thumbnails */
+    .thumb-strip { list-style: none; margin: 0; padding: 6px 6px 0 0; display: flex; flex-wrap: wrap; gap: 14px; }
+    .strip-item { position: relative; }
+    .strip-item .thumb { width: 64px; height: 64px; }
+    button.thumb-remove {
+      position: absolute;
+      top: -7px;
+      right: -7px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border-radius: 50%;
+      color: var(--text);
+      background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ece9f1' stroke-width='2.75' stroke-linecap='round'%3E%3Cpath d='M7 7l10 10M17 7L7 17'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+      border: 1px solid var(--border-strong);
+    }
+    button.thumb-remove:hover:not(:disabled) { filter: none; border-color: var(--pink); background-color: #2a1f3a; }
+
     /* Buttons */
     button {
       font: inherit;
@@ -353,6 +371,7 @@
         <button type="button" class="secondary" id="choose-btn">Choose files</button>
         <span class="hint" id="file-count-label">No files chosen</span>
       </div>
+      <ul class="thumb-strip" id="thumb-strip" hidden></ul>
     </section>
 
     <section class="field">
@@ -462,6 +481,8 @@ let pollTimer = null;
 let jobRunning = false;
 let hasFinishedJob = false;
 let thumbUrls = [];
+let stripUrls = [];
+const thumbStrip = document.getElementById("thumb-strip");
 
 const fieldBoxes = Array.from(form.querySelectorAll("input[data-field]"));
 
@@ -526,27 +547,65 @@ function isAcceptedFile(file) {
 
 function updateFileCount() {
   const n = imagesInput.files.length;
-  fileCountLabel.textContent = n === 0 ? "No files chosen" : `${n} image${n === 1 ? "" : "s"} selected`;
-  if (!jobRunning) renderSelection();
+  fileCountLabel.textContent = n === 0 ? "No files chosen" : `${n} image${n === 1 ? "" : "s"} uploaded`;
+  renderStrip();
+  if (!jobRunning) clearResults();
 }
 
-// Show thumbnails for the chosen files right away, before anything is uploaded.
-function renderSelection() {
+// A new selection invalidates whatever results were on screen.
+function clearResults() {
   revokeThumbs();
   rows.clear();
   resultsList.replaceChildren();
   progressPanel.style.display = "none";
-  hasFinishedJob = false;
-  const byName = new Map(Array.from(imagesInput.files).filter(isAcceptedFile).map((f) => [f.name, f]));
-  const files = Array.from(byName.values()).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  resultsTitle.textContent = `Selected images (${files.length})`;
+  resultsPanel.style.display = "none";
   resultsActions.hidden = true;
-  resultsPanel.style.display = files.length ? "block" : "none";
-  files.forEach((f) => rows.set(f.name, createRow({ saved: f.name, original: f.name }, f, "ready")));
+  hasFinishedJob = false;
+}
+
+// Tiny thumbnails of the chosen files, each with an X to drop it from the batch.
+function renderStrip() {
+  stripUrls.forEach((u) => URL.revokeObjectURL(u));
+  stripUrls = [];
+  const files = Array.from(imagesInput.files);
+  thumbStrip.hidden = files.length === 0;
+  thumbStrip.replaceChildren(
+    ...files.map((file) => {
+      const item = el("li", "strip-item");
+      item.title = file.name;
+      const thumb = el("div", "thumb");
+      const fallback = () => {
+        thumb.replaceChildren();
+        thumb.textContent = (file.name.split(".").pop() || "img").slice(0, 4);
+      };
+      const img = document.createElement("img");
+      img.alt = "";
+      img.addEventListener("error", fallback); // e.g. HEIC, which most browsers can't display
+      const url = URL.createObjectURL(file);
+      stripUrls.push(url);
+      img.src = url;
+      thumb.appendChild(img);
+      const remove = el("button", "thumb-remove");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${file.name}`);
+      remove.addEventListener("click", () => removeFile(file));
+      item.append(thumb, remove);
+      return item;
+    })
+  );
+}
+
+function removeFile(file) {
+  const remaining = new DataTransfer();
+  Array.from(imagesInput.files).forEach((f) => { if (f !== file) remaining.items.add(f); });
+  imagesInput.files = remaining.files;
+  updateFileCount();
 }
 
 function addFiles(fileList) {
-  const accepted = Array.from(fileList).filter(isAcceptedFile);
+  const key = (f) => `${f.name}|${f.size}|${f.lastModified}`;
+  const seen = new Set(Array.from(imagesInput.files).map(key));
+  const accepted = Array.from(fileList).filter((f) => isAcceptedFile(f) && !seen.has(key(f)));
   if (accepted.length === 0) return;
   const merged = new DataTransfer();
   Array.from(imagesInput.files).forEach((f) => merged.items.add(f));
