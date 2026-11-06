@@ -1,4 +1,4 @@
-# embed-image-metadata-llm
+# Embed Image Metadata LLM
 
 [![Tests](https://github.com/danny-englander/embed-image-metadata-llm/actions/workflows/tests.yml/badge.svg)](https://github.com/danny-englander/embed-image-metadata-llm/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
