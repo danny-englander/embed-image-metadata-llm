@@ -221,7 +221,8 @@ def _resolve_style(parser, field, style, creative, fields) -> str:
 def parse_args(argv=None) -> argparse.Namespace:
     """Parse and validate CLI args. Adds args.fields and args.overwrite (tuples, in FIELDS order)."""
     parser = build_parser()
-    args = parser.parse_args(argv)
+    # Intermixed so the positional context can follow flags on Python < 3.12 too.
+    args = parser.parse_intermixed_args(argv)
     args.context = args.context or args.context_positional
     args.fields = tuple(f for f in FIELDS if getattr(args, f))
     args.overwrite = tuple(

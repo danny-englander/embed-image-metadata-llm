@@ -1,5 +1,10 @@
 # embed-image-metadata-llm
 
+[![Tests](https://github.com/danny-englander/embed-image-metadata-llm/actions/workflows/tests.yml/badge.svg)](https://github.com/danny-englander/embed-image-metadata-llm/actions/workflows/tests.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/github/license/danny-englander/embed-image-metadata-llm)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/danny-englander/embed-image-metadata-llm)](https://github.com/danny-englander/embed-image-metadata-llm/commits/main)
+
 Generate image metadata with an LLM and embed it directly in your image files.
 
 For each image it can write:
@@ -270,7 +275,7 @@ There are unit tests for caption cleaning, word replacements, prompt building, p
 python -m unittest discover
 ```
 
-All tests should pass.
+All tests should pass. GitHub Actions runs the same tests on Python 3.10 and 3.13 for every push to `main` and every pull request.
 
 ---
 
