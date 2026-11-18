@@ -205,6 +205,22 @@ def job_download(job_id):
     return send_file(zip_path, as_attachment=True, download_name="tagged-images.zip")
 
 
+@app.route("/jobs/<job_id>/files/<name>")
+def job_file(job_id, name):
+    """One tagged image, so the browser can write it back over the original ("write in place")."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            return jsonify({"error": "Unknown job."}), 404
+        job_dir = job["dir"]
+
+    # Saved names are already secure_filename()'d; anything else is not a file of this job.
+    path = job_dir / name
+    if name != secure_filename(name) or not path.is_file():
+        return jsonify({"error": "Unknown file."}), 404
+    return send_file(path, as_attachment=True, download_name=name)
+
+
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 ALL_INTERFACES = ("0.0.0.0", "::")
 

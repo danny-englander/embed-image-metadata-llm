@@ -1,6 +1,8 @@
 import contextlib
 import io
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import webapp
@@ -47,6 +49,38 @@ class TestAcceptedFormats(unittest.TestCase):
     def test_heic_and_heif_are_accepted(self):
         self.assertIn(".heic", EXTENSIONS)
         self.assertIn(".heif", EXTENSIONS)
+
+
+class TestJobFile(unittest.TestCase):
+    """The per-file route the browser uses to write tagged images back over the originals."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.job_dir = self.root / "job"
+        self.job_dir.mkdir()
+        (self.job_dir / "photo.jpg").write_bytes(b"tagged bytes")
+        (self.root / "secret.txt").write_text("outside the job")
+        jobs = {"abc": {"dir": self.job_dir, "total": 1, "done": 1, "results": [], "state": "done"}}
+        patcher = patch.dict(webapp._jobs, jobs, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.tmp.cleanup)
+        self.client = webapp.app.test_client()
+
+    def test_serves_a_tagged_file(self):
+        res = self.client.get("/jobs/abc/files/photo.jpg")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data, b"tagged bytes")
+        res.close()
+
+    def test_unknown_job_or_file_is_404(self):
+        self.assertEqual(self.client.get("/jobs/nope/files/photo.jpg").status_code, 404)
+        self.assertEqual(self.client.get("/jobs/abc/files/missing.jpg").status_code, 404)
+
+    def test_cannot_reach_outside_the_job_folder(self):
+        for name in ("..%2Fsecret.txt", "../secret.txt", "%2E%2E%2Fsecret.txt"):
+            self.assertEqual(self.client.get(f"/jobs/abc/files/{name}").status_code, 404, name)
 
 
 if __name__ == "__main__":

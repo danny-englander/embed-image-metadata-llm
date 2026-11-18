@@ -132,6 +132,36 @@
     .drop-zone .drop-zone-text span { color: var(--link); }
     .drop-zone .hint { font-size: 15px; }
     .file-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+    /* Output choice: zip download or write back to the originals */
+    .mode-list { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    label.mode-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin: 0;
+      padding: clamp(14px, 4vw, 18px) clamp(16px, 4vw, 24px);
+      cursor: pointer;
+    }
+    label.mode-option + label.mode-option { border-top: 1px solid var(--border); }
+    label.mode-option:has(:checked) { background: linear-gradient(180deg, rgba(120, 100, 220, 0.16), rgba(200, 120, 220, 0.08)); }
+    label.mode-option:has(:disabled) { cursor: not-allowed; }
+    label.mode-option:has(:disabled) .mode-title { color: var(--disabled); }
+    label.mode-option input {
+      flex: none;
+      width: 20px;
+      height: 20px;
+      margin: 4px 0 0;
+      accent-color: var(--violet);
+      cursor: inherit;
+    }
+    label.mode-option input:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 50%; }
+    .mode-text { display: flex; flex-direction: column; gap: 2px; }
+    .mode-title { font-weight: 600; }
+    .mode-text .hint { font-weight: 400; }
+    .save-note { font-size: 14px; color: var(--muted); white-space: nowrap; }
+    .save-note.saved { color: var(--teal); }
+    .save-note.failed { color: var(--pink); }
     #file-count-label { font-size: 16px; }
 
     /* Selected-file thumbnails */
@@ -369,10 +399,30 @@
 
   <form id="upload-form" class="panel" enctype="multipart/form-data">
     <section class="field">
+      <div class="label" id="mode-label">When it's done</div>
+      <div class="mode-list" role="radiogroup" aria-labelledby="mode-label">
+        <label class="mode-option">
+          <input type="radio" name="output_mode" value="zip" id="mode-zip" checked>
+          <span class="mode-text">
+            <span class="mode-title">Download the tagged images</span>
+            <span class="hint">Your originals are left alone. The tagged copies come back as a zip.</span>
+          </span>
+        </label>
+        <label class="mode-option">
+          <input type="radio" name="output_mode" value="inplace" id="mode-inplace">
+          <span class="mode-text">
+            <span class="mode-title">Write to the original files</span>
+            <span class="hint" id="inplace-hint">Choose a folder. Each image is saved over its original as soon as it's tagged, with no backup copy.</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="field">
       <div class="label">Images</div>
       <div id="drop-zone" class="drop-zone" tabindex="0" role="button" aria-controls="images">
-        <p class="drop-zone-text">Drag &amp; drop images here, or <span>click to browse</span></p>
-        <p class="hint">JPEG, PNG, GIF, WebP or HEIC/HEIF</p>
+        <p class="drop-zone-text" id="drop-zone-text">Drag &amp; drop images here, or <span>click to browse</span></p>
+        <p class="hint" id="drop-zone-hint">JPEG, PNG, GIF, WebP or HEIC/HEIF</p>
       </div>
       <input type="file" id="images" name="images" multiple
              accept=".jpg,.jpeg,.png,.gif,.heic,.heif,.webp" hidden>
@@ -490,7 +540,40 @@ const rerunBtn = document.getElementById("rerun-btn");
 const resultsTitle = document.getElementById("results-title");
 const resultsActions = document.getElementById("results-actions");
 
+// "Write to the original files" uses the File System Access API: Chrome/Edge only, and only in a
+// secure context (localhost counts; a plain-http LAN address such as a phone uses doesn't).
+const modeZip = document.getElementById("mode-zip");
+const modeInPlace = document.getElementById("mode-inplace");
+const chooseBtn = document.getElementById("choose-btn");
+const dropZoneText = document.getElementById("drop-zone-text");
+const dropZoneHint = document.getElementById("drop-zone-hint");
+const SUPPORTS_IN_PLACE = window.isSecureContext && "showDirectoryPicker" in window;
+const MODE_KEY = "output-mode";
+
+let folderHandle = null; // the chosen folder, in write-in-place mode
+let fileHandles = new Map(); // file name -> FileSystemFileHandle in that folder
+let writeJob = null; // { folder, chain, saved, failed } while a write-in-place job is writing back
+
+const inPlace = () => modeInPlace.checked;
+
+function setDropZoneText(lead, link) {
+  dropZoneText.replaceChildren(`${lead}, or `, el("span", null, link));
+}
+
+function syncMode() {
+  if (inPlace()) {
+    setDropZoneText("Drag & drop a folder here", "click to choose one");
+    dropZoneHint.textContent = "Images at the top level of the folder are added. Remove any you want to leave alone.";
+    chooseBtn.textContent = "Choose folder";
+  } else {
+    setDropZoneText("Drag & drop images here", "click to browse");
+    dropZoneHint.textContent = "JPEG, PNG, GIF, WebP or HEIC/HEIF";
+    chooseBtn.textContent = "Choose files";
+  }
+}
+
 let pollTimer = null;
+let finishedJobId = null;
 let jobRunning = false;
 let hasFinishedJob = false;
 let thumbUrls = [];
@@ -560,7 +643,9 @@ function isAcceptedFile(file) {
 
 function updateFileCount() {
   const n = imagesInput.files.length;
-  fileCountLabel.textContent = n === 0 ? "No files chosen" : `${n} image${n === 1 ? "" : "s"} uploaded`;
+  const images = `${n} image${n === 1 ? "" : "s"}`;
+  if (n === 0) fileCountLabel.textContent = inPlace() ? "No folder chosen" : "No files chosen";
+  else fileCountLabel.textContent = inPlace() && folderHandle ? `${images} from “${folderHandle.name}”` : `${images} uploaded`;
   renderStrip();
   if (!jobRunning) clearResults();
 }
@@ -627,16 +712,72 @@ function addFiles(fileList) {
   updateFileCount();
 }
 
+function setFiles(files) {
+  const list = new DataTransfer();
+  files.forEach((f) => list.items.add(f));
+  imagesInput.files = list.files;
+  updateFileCount();
+}
+
+function showError(message) {
+  errorBox.style.display = "block";
+  errorBox.textContent = message;
+}
+
+// Use a folder's top-level images as the selection, keeping a handle to each so it can be written back.
+async function loadFolder(dir) {
+  const handles = new Map();
+  for await (const handle of dir.values()) {
+    if (handle.kind === "file" && isAcceptedFile(handle)) handles.set(handle.name, handle);
+  }
+  if (handles.size === 0) {
+    showError(`No JPEG, PNG, GIF, WebP or HEIC/HEIF images at the top level of “${dir.name}”.`);
+    return;
+  }
+  const names = Array.from(handles.keys()).sort((a, b) => a.localeCompare(b));
+  const files = await Promise.all(names.map((name) => handles.get(name).getFile()));
+  errorBox.style.display = "none";
+  folderHandle = dir;
+  fileHandles = handles;
+  setFiles(files);
+}
+
+async function chooseFolder() {
+  try {
+    await loadFolder(await window.showDirectoryPicker({ id: "image-caption", mode: "readwrite" }));
+  } catch (err) {
+    if (err.name !== "AbortError") showError(`Couldn't open that folder: ${err.message}`);
+  }
+}
+
+function browse() {
+  if (jobRunning) return;
+  if (inPlace()) chooseFolder();
+  else imagesInput.click();
+}
+
 imagesInput.addEventListener("change", updateFileCount);
 
-dropZone.addEventListener("click", () => imagesInput.click());
-document.getElementById("choose-btn").addEventListener("click", () => imagesInput.click());
+dropZone.addEventListener("click", browse);
+chooseBtn.addEventListener("click", browse);
 dropZone.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
-    imagesInput.click();
+    browse();
   }
 });
+
+// Switching modes starts the selection over: a folder's files and loose uploads aren't interchangeable.
+[modeZip, modeInPlace].forEach((radio) =>
+  radio.addEventListener("change", () => {
+    localStorage.setItem(MODE_KEY, radio.value);
+    folderHandle = null;
+    fileHandles = new Map();
+    setFiles([]);
+    syncMode();
+    updateFileCount();
+  })
+);
 
 ["dragenter", "dragover"].forEach((evt) => {
   dropZone.addEventListener(evt, (e) => {
@@ -649,10 +790,21 @@ dropZone.addEventListener("keydown", (e) => {
   dropZone.addEventListener(evt, () => dropZone.classList.remove("drag-over"));
 });
 
-dropZone.addEventListener("drop", (e) => {
+dropZone.addEventListener("drop", async (e) => {
   e.preventDefault();
   dropZone.classList.remove("drag-over");
-  if (e.dataTransfer && e.dataTransfer.files.length) {
+  if (!e.dataTransfer || jobRunning) return;
+  if (inPlace()) {
+    // Handles must be requested synchronously, before the drop's data goes away.
+    const pending = Array.from(e.dataTransfer.items)
+      .filter((item) => item.kind === "file" && item.getAsFileSystemHandle)
+      .map((item) => item.getAsFileSystemHandle());
+    const dir = (await Promise.all(pending)).find((h) => h && h.kind === "directory");
+    if (dir) loadFolder(dir).catch((err) => showError(`Couldn't open that folder: ${err.message}`));
+    else showError("Drop a folder, not individual files, to write to the originals. Or switch to the download.");
+    return;
+  }
+  if (e.dataTransfer.files.length) {
     addFiles(e.dataTransfer.files);
   }
 });
@@ -704,6 +856,7 @@ function createRow(entry, file, statusText = "queued") {
   const head = el("div", "result-head");
   const row = {
     li,
+    original: entry.original,
     thumb: makeThumb(file, entry.original),
     name: el("span", "result-name", entry.original),
     status: el("span", "result-status status-pending", statusText),
@@ -776,6 +929,39 @@ function renderResult(r) {
   const details = el("details");
   details.append(summary, body);
   row.li.replaceChildren(details);
+
+  if (writeJob) {
+    const note = el("span", "save-note");
+    summary.insertBefore(note, row.status.nextSibling);
+    // One at a time, in order, so a slow write never races the next one.
+    writeJob.chain = writeJob.chain.then(() => writeBack(writeJob, r, row, note));
+  }
+}
+
+// Save one tagged image over its original. Only files that actually gained metadata are rewritten.
+async function writeBack(job, r, row, note) {
+  if (!r.written.length) {
+    note.textContent = "original unchanged";
+    return;
+  }
+  note.textContent = "saving…";
+  try {
+    const handle = fileHandles.get(row.original);
+    if (!handle) throw new Error("it's no longer in the chosen folder");
+    const res = await fetch(`/jobs/${job.id}/files/${encodeURIComponent(r.filename)}`);
+    if (!res.ok) throw new Error("the tagged copy couldn't be fetched");
+    const tagged = await res.blob();
+    const writable = await handle.createWritable();
+    await writable.write(tagged);
+    await writable.close();
+    job.saved += 1;
+    note.className = "save-note saved";
+    note.textContent = "saved to original";
+  } catch (err) {
+    job.failed += 1;
+    note.className = "save-note failed";
+    note.textContent = `not saved: ${err.message}`;
+  }
 }
 
 function markProcessing() {
@@ -793,7 +979,9 @@ async function poll(jobId) {
     errorBox.style.display = "block";
     errorBox.textContent = "Lost track of the job. Please try again.";
     jobRunning = false;
+    writeJob = null;
     submitBtn.disabled = false;
+    setModeLocked(false);
     return;
   }
   const job = await res.json();
@@ -803,15 +991,27 @@ async function poll(jobId) {
   job.results.forEach(renderResult);
   markProcessing();
 
-  if (job.state === "done") {
+  if (job.state === "done" && finishedJobId !== jobId) {
+    finishedJobId = jobId; // overlapping polls can both see "done"; finish only once
     clearInterval(pollTimer);
     progressLabel.textContent = `Done: ${job.done} / ${job.total}`;
-    downloadLink.href = `/jobs/${jobId}/download`;
-    downloadLink.style.display = "inline-block";
+    if (writeJob) {
+      const finished = writeJob;
+      progressLabel.textContent += ", saving to the originals…";
+      await finished.chain;
+      const failed = finished.failed ? `, ${finished.failed} couldn't be saved` : "";
+      progressLabel.textContent =
+        `Done: ${job.done} / ${job.total}. ${finished.saved} saved to “${finished.folder}”${failed}.`;
+      writeJob = null;
+    } else {
+      downloadLink.href = `/jobs/${jobId}/download`;
+      downloadLink.style.display = "inline-block";
+    }
     rerunBtn.hidden = false;
     hasFinishedJob = true;
     jobRunning = false;
     submitBtn.disabled = false;
+    setModeLocked(false);
   }
 }
 
@@ -830,19 +1030,39 @@ form.addEventListener("submit", async (e) => {
     errorBox.scrollIntoView({ block: "center" });
     return;
   }
+  const writing = inPlace();
+  if (writing && !folderHandle) {
+    showError("Choose a folder first.");
+    return;
+  }
   clearInterval(pollTimer);
   submitBtn.disabled = true;
   jobRunning = true;
   rerunBtn.hidden = true;
+  setModeLocked(true);
 
   const data = new FormData(form);
   try {
+    let files = Array.from(imagesInput.files);
+    if (writing) {
+      // Ask first, while the click still counts as a user action (a picked folder is usually granted already).
+      if ((await folderHandle.requestPermission({ mode: "readwrite" })) !== "granted") {
+        throw new Error(`Saving to “${folderHandle.name}” wasn't allowed, so nothing was processed.`);
+      }
+      // Read each file fresh: a File read earlier can't be read again once its original has been rewritten.
+      files = await Promise.all(files.map((f) => fileHandles.get(f.name).getFile()));
+      data.delete("images");
+      files.forEach((f) => data.append("images", f, f.name));
+    }
     const res = await fetch("/jobs", { method: "POST", body: data });
     const body = await res.json();
     if (!res.ok) {
       throw new Error(body.error || "Upload failed.");
     }
-    const fileByName = new Map(Array.from(imagesInput.files).map((f) => [f.name, f]));
+    writeJob = writing
+      ? { id: body.job_id, folder: folderHandle.name, chain: Promise.resolve(), saved: 0, failed: 0 }
+      : null;
+    const fileByName = new Map(files.map((f) => [f.name, f]));
     revokeThumbs();
     resultsList.replaceChildren();
     rows.clear();
@@ -862,6 +1082,7 @@ form.addEventListener("submit", async (e) => {
     errorBox.textContent = err.message;
     submitBtn.disabled = false;
     jobRunning = false;
+    setModeLocked(false);
     rerunBtn.hidden = !hasFinishedJob; // earlier results are still on screen
   }
 });
@@ -875,6 +1096,22 @@ rerunBtn.addEventListener("click", () => form.requestSubmit());
 resetBtn.addEventListener("click", () => {
   window.location.reload();
 });
+
+function setModeLocked(locked) {
+  modeZip.disabled = locked;
+  modeInPlace.disabled = locked || !SUPPORTS_IN_PLACE;
+}
+
+if (!SUPPORTS_IN_PLACE) {
+  document.getElementById("inplace-hint").textContent = window.isSecureContext
+    ? "Needs Chrome or Edge. In this browser, use the download instead."
+    : "Needs Chrome or Edge on the computer running the app, with the page opened at http://127.0.0.1 or http://localhost.";
+} else if (localStorage.getItem(MODE_KEY) === "inplace") {
+  modeInPlace.checked = true;
+}
+setModeLocked(false);
+syncMode();
+updateFileCount();
 </script>
 </body>
 </html>

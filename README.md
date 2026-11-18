@@ -19,12 +19,12 @@ Use it from the command line (`update-images.py`) or from a browser (`webapp.py`
 - **Choose any combination of the four fields.** Each has its own overwrite option, plus an "overwrite all". A field that already has a value is skipped by default, so you can safely fill in only what's missing.
 - **Writing styles** for titles (standard, creative, editorial, poetic, literal) and descriptions (standard, creative, caption, photographic).
 - **Optional context**, such as "Cherry blossoms at the Japanese Friendship Garden", to improve results.
-- **A web interface** with instant thumbnails, live per-image results showing exactly what was written, skipped or failed for each field, a **Run again** button, and a zip download of the tagged images.
+- **A web interface** with instant thumbnails, live per-image results showing exactly what was written, skipped or failed for each field, a **Run again** button, and either a zip download of the tagged images or (in Chrome or Edge) saving straight back to the originals.
 - **Many formats:** JPEG, PNG, GIF, WebP, and HEIC/HEIF (iPhone photos).
 - **No database.** The metadata lives in the image files themselves.
 - **Powered by Claude** through the [`llm`](https://llm.datasette.io/) CLI: Sonnet 5.5 by default, with Sonnet 4.6 available.
 
-> **Before you run it:** the command-line tool writes metadata into your files **in place**, with no `_original` backup copies, so work on copies of anything you can't regenerate. (The web interface works on uploaded copies and gives you the tagged files back as a zip, so your originals are untouched.) Either way, images are downscaled to 1024 px on the long side and sent to the Anthropic API, so don't use it on photos you aren't willing to send there.
+> **Before you run it:** the command-line tool writes metadata into your files **in place**, with no `_original` backup copies, so work on copies of anything you can't regenerate. (The web interface works on uploaded copies and gives you the tagged files back as a zip, so your originals are untouched, unless you choose its **Write to the original files** option, which also saves in place with no backup.) Either way, images are downscaled to 1024 px on the long side and sent to the Anthropic API, so don't use it on photos you aren't willing to send there.
 
 These instructions assume macOS or Linux. Windows should work with equivalent tools, but commands may differ.
 
@@ -349,7 +349,13 @@ photos with the file picker, and download the tagged zip when it finishes. Thing
 
 ### Using the interface
 
-Upload one or more images, pick a model, add optional context,
+First choose what happens when it's done:
+
+- **Download the tagged images** (the default): your originals are left alone and the tagged copies come back as a zip.
+- **Write to the original files**: choose (or drag in) a folder, and each image is saved over its original as soon as it's tagged, with **no backup copy**. Only images at the top level of the folder are added, and you can remove any you want to leave alone. Files where nothing was written (every field already set and skipped) aren't touched.
+  This uses the browser's File System Access API, so it needs **Chrome or Edge** on the computer running the app, with the page opened at `http://127.0.0.1` or `http://localhost`. In Safari, Firefox, or from your phone, the option is greyed out and you get the zip. The browser asks once for permission to save changes to the folder. The choice is remembered for next time.
+
+Then add one or more images, pick a model, add optional context,
 and tick the fields to generate. They are the same controls as `update-images.py`'s flags:
 
 - **Alt text**, **IPTC Title**, **IPTC Description**, **IPTC Keywords** — each is its own checkbox
@@ -365,9 +371,9 @@ Thumbnails of the images you choose appear immediately, before anything is uploa
 **Upload & Process**, each image becomes an expandable row as its result arrives, with a table of what
 was written, skipped, or failed for every field. When the batch finishes, **Run again** reprocesses the
 same images using whatever options are currently ticked, so you can change a checkbox and compare
-results without re-selecting files. Each run starts from your original images, not the previously tagged copies.
+results without re-selecting files. In download mode each run starts from your original images, not the previously tagged copies; when writing to the originals, a run starts from the files as they are now, so fields written last time count as already set.
 
-Progress and results are shown live; when done, download a zip of the tagged images
+Progress and results are shown live; when done, download a zip of the tagged images, or, when writing to the originals, check the "saved to original" note on each row
 (metadata embedded exactly as the CLI would write it, since the web app calls the same
 `image_processor.py` logic in-process).
 
